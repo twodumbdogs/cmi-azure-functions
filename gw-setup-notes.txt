@@ -1,0 +1,11 @@
+##From PowerShell
+# Gabe's Setup Notes 🧙‍♂️
+
+## 🧠 Git Configuration
+
+git config --global user.name "Gabe Williams"
+git config --global user.email "gabe.williams@nortonrosefulbright.com"
+
+
+## change the azure cli directory to account for roaming profile
+setx AZURE_CONFIG_DIR "C:\gw\azure-cli-config"

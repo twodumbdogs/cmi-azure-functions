@@ -16,72 +16,128 @@ function Write-Log {
     Write-Host "[$ts][$Level][clients-subscriber][$__VERSION] $Message"
 }
 
+# ---------------------------
+# ENV CONFIG
+# ---------------------------
+
+$ClientId     = $env:intapp__clientId
+$ClientSecret = $env:intapp__clientSecret
+$TokenUrl     = $env:intapp__tokenUrl
+$ApiHost      = $env:intapp__apiHost   # e.g. suk3vdwkfweb01.ad.adsinternal.com
+
+if (-not $ApiHost) {
+    Write-Log -Level 'ERROR' -Message "No API host defined in env:intapp__apiHost"
+    throw "Missing API Host"
+}
+
+$ApiUrl = "https://$ApiHost/Open.Services.REST/api/common/v1/virtualtables/sb-responses"
+
+# ---------------------------
+# TOKEN HELPER
+# ---------------------------
+
+function Get-IntappToken {
+    Write-Log -Message "Requesting token from $TokenUrl"
+
+    $body = @{
+        grant_type    = "client_credentials"
+        client_id     = $ClientId
+        client_secret = $ClientSecret
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $TokenUrl `
+            -ContentType "application/x-www-form-urlencoded" `
+            -Body $body
+
+        if ($response.access_token) {
+            Write-Log -Message "Successfully acquired access token."
+            return $response.access_token
+        }
+
+        Write-Log -Level 'ERROR' -Message "Token response missing access_token."
+        throw "No access_token field"
+    }
+    catch {
+        Write-Log -Level 'ERROR' -Message "Token request failed: $($_.Exception.Message)"
+        throw
+    }
+}
+
+# ---------------------------
+# MAIN EXECUTION
+# ---------------------------
 try {
-    # Guard against null message
     if (-not $msg) {
         Write-Log -Level 'WARN' -Message "Received an empty or null message — skipping."
         return
     }
 
-    # Normalize body to string
+    # Normalize body
     $raw = if ($msg -is [string]) { $msg } else { $msg | ConvertTo-Json -Depth 50 }
-    $size = if ($null -ne $raw) { $raw.Length } else { 0 }
-    Write-Log -Message "Received message. Size: $size characters."
+    $size = $raw.Length
+    Write-Log -Message "Received message. Size: $size bytes."
 
-    # Try parse JSON
+    # JSON parse attempt
     $obj = $null
     try {
         $obj = $raw | ConvertFrom-Json -ErrorAction Stop
-    }
-    catch {
+    } catch {
         Write-Log -Level 'WARN' -Message "Message not valid JSON — treating as plain text."
     }
 
     if ($obj) {
-        # Pretty-print full JSON body (truncated if huge)
-        try {
-            $prettyJson = $obj | ConvertTo-Json -Depth 20
-        }
-        catch {
-            $prettyJson = $raw
-        }
-
-        $maxLogLength = 4000  # avoid completely flooding logs
-        if ($prettyJson.Length -gt $maxLogLength) {
-            $snippet = $prettyJson.Substring(0, $maxLogLength)
-            Write-Log -Message "Full JSON body (truncated to $maxLogLength chars): $snippet"
-        }
-        else {
-            Write-Log -Message "Full JSON body: $prettyJson"
-        }
-
-        # Small preview of key fields (if present)
         $preview = @{
             eventType = $obj.EventType
             requestId = $obj.RequestID
             clientId  = $obj.ClientId
         } | ConvertTo-Json -Depth 5
         Write-Log -Message "Parsed JSON preview: $preview"
-    }
-    else {
-        Write-Log -Message "Non-JSON message body: $raw"
+    } else {
+        Write-Log -Message "Message text: $raw"
     }
 
-    # Forward the message to your UK SB topic
-    Push-OutputBinding -Name forward -Value $raw
-    Write-Log -Message "Forwarded to UK Service Bus topic (connection: 'uk_sb')."
+    # -------------------------------------------------
+    # SEND MESSAGE TO INTAPP API
+    # -------------------------------------------------
 
-    # Mark success
-    Write-Log -Message "Message processed successfully."
+    $token = Get-IntappToken
+
+    $payload = @(
+        @{
+            timestamp = (Get-Date).ToString("o")
+            payload   = $obj       # raw JSON object from SB
+            status    = "ok"
+        }
+    ) | ConvertTo-Json -Depth 20
+
+    Write-Log -Message "Sending payload to API: $ApiUrl"
+
+    try {
+        $response = Invoke-RestMethod -Method Put -Uri $ApiUrl `
+            -Headers @{ Authorization = "Bearer $token" } `
+            -ContentType "application/json" `
+            -Body $payload
+
+        Write-Log -Message "API response received successfully."
+    }
+    catch {
+        Write-Log -Level 'ERROR' -Message "API call failed: $($_.Exception.Message)"
+        throw
+    }
+
+    # Marks success
+    Write-Log -Message "Processed OK ✅"
 }
 catch {
     Write-Log -Level 'ERROR' -Message "Unhandled error: $($_.Exception.Message)`n$($_ | Out-String)"
+
     try {
         Push-OutputBinding -Name fails -Value $msg
         Write-Log -Level 'WARN' -Message "Routed failed message to 'fails' topic."
-    }
-    catch {
+    } catch {
         Write-Log -Level 'ERROR' -Message "Could not route to fails topic: $($_.Exception.Message)"
     }
+
     throw
 }

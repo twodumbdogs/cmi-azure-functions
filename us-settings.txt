@@ -1,0 +1,14 @@
+Managed Identity
+•	9721afab-d630-4af6-a557-d6629aa29a8f
+•	Permissions:
+o	Topic: compliance.clients.v1 > Service Bus Receiver Role
+o	Topic: compliance.matters.v1 > Service Bus Receiver Role
+Clients
+•	Service Bus: sb-us-non-prod-dev-esb-scus.servicebus.windows.net
+•	Topic: compliance.clients.v1
+•	Subscription: compliance.clients.v1.sub-global-response
+
+Matters
+•	Service Bus: sb-us-non-prod-dev-esb-scus.servicebus.windows.net
+•	Topic: compliance.matters.v1
+•	Subscription: compliance.matters.v1.sub-global-response

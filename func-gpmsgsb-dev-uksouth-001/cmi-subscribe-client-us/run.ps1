@@ -2,7 +2,7 @@
 param($msg, $TriggerMetadata)
 
 $ErrorActionPreference = 'Stop'
-$__VERSION = 'clients-v1.1'
+$__VERSION = 'clients-v1.2'
 
 Write-Host "[SB] Polling $($TriggerMetadata.Topic) / $($TriggerMetadata.SubscriptionName) from $env:us_sb__fullyQualifiedNamespace"
 
@@ -23,28 +23,48 @@ try {
         return
     }
 
-    # Normalize body
+    # Normalize body to string
     $raw = if ($msg -is [string]) { $msg } else { $msg | ConvertTo-Json -Depth 50 }
     $size = if ($null -ne $raw) { $raw.Length } else { 0 }
-    Write-Log -Message "Received message. Size: $size bytes."
+    Write-Log -Message "Received message. Size: $size characters."
 
     # Try parse JSON
     $obj = $null
     try {
         $obj = $raw | ConvertFrom-Json -ErrorAction Stop
-    } catch {
+    }
+    catch {
         Write-Log -Level 'WARN' -Message "Message not valid JSON — treating as plain text."
     }
 
     if ($obj) {
+        # Pretty-print full JSON body (truncated if huge)
+        try {
+            $prettyJson = $obj | ConvertTo-Json -Depth 20
+        }
+        catch {
+            $prettyJson = $raw
+        }
+
+        $maxLogLength = 4000  # avoid completely flooding logs
+        if ($prettyJson.Length -gt $maxLogLength) {
+            $snippet = $prettyJson.Substring(0, $maxLogLength)
+            Write-Log -Message "Full JSON body (truncated to $maxLogLength chars): $snippet"
+        }
+        else {
+            Write-Log -Message "Full JSON body: $prettyJson"
+        }
+
+        # Small preview of key fields (if present)
         $preview = @{
             eventType = $obj.EventType
             requestId = $obj.RequestID
             clientId  = $obj.ClientId
         } | ConvertTo-Json -Depth 5
         Write-Log -Message "Parsed JSON preview: $preview"
-    } else {
-        Write-Log -Message "Message text: $raw"
+    }
+    else {
+        Write-Log -Message "Non-JSON message body: $raw"
     }
 
     # Forward the message to your UK SB topic
@@ -52,14 +72,15 @@ try {
     Write-Log -Message "Forwarded to UK Service Bus topic (connection: 'uk_sb')."
 
     # Mark success
-    Write-Log -Message "Processed OK ✅"
+    Write-Log -Message "Message processed successfully."
 }
 catch {
     Write-Log -Level 'ERROR' -Message "Unhandled error: $($_.Exception.Message)`n$($_ | Out-String)"
     try {
         Push-OutputBinding -Name fails -Value $msg
         Write-Log -Level 'WARN' -Message "Routed failed message to 'fails' topic."
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Could not route to fails topic: $($_.Exception.Message)"
     }
     throw

@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "type": "serviceBusTrigger",
+      "direction": "in",
+      "name": "msg",
+      "topicName": "sbt.pms.cmi.client.nonprod.dev1",
+      "subscriptionName": "sbs.pms.cmi.client.aderant.nonprod.dev1",
+      "connection": "emea_sb"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}

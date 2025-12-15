@@ -17,21 +17,21 @@
       "direction": "out",
       "type": "serviceBus",
       "connection": "dev_service_bus_RBAC",
-      "topicName": "dev-cmi-matter-202509"
+      "topicName": "cmi-matter"
     },
     {
       "name": "client",
       "direction": "out",
       "type": "serviceBus",
       "connection": "dev_service_bus_RBAC",
-      "topicName": "dev-cmi-client-202509"
+      "topicName": "cmi-client"
     },
     {
       "name": "payor",
       "direction": "out",
       "type": "serviceBus",
       "connection": "dev_service_bus_RBAC",
-      "topicName": "dev-cmi-payor-202509"
+      "topicName": "cmi-payor"
     },
     {
       "name": "fails",

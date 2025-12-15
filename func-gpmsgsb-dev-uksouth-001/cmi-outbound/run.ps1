@@ -44,17 +44,17 @@ try {
     $jsonOut = ($body | ConvertTo-Json -Depth 10)
 
     switch ($topicKey) {
-        'dev-cmi-matter-202509' {
+        'matter' {
             Push-OutputBinding -Name matter -Value $jsonOut
-            LogInfo "Routed to dev-cmi-matter-202509"
+            LogInfo "Routed to matter"
         }
-        'dev-cmi-client-202509' {
+        'client' {
             Push-OutputBinding -Name client -Value $jsonOut
-            LogInfo "Routed to dev-cmi-client-202509"
+            LogInfo "Routed to client"
         }
-        'dev-cmi-payor-202509' {
+        'payor' {
             Push-OutputBinding -Name payor -Value $jsonOut
-            LogInfo "Routed to dev-cmi-payor-202509"
+            LogInfo "Routed to payor"
         }
         default {
             LogInfo "No matching route for '$topicKey'; sending message to error queue"

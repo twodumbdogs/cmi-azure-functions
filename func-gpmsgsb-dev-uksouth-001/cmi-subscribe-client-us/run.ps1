@@ -161,7 +161,22 @@ try {
         IntegrateAuthenticationToken = $ibauthcode
     }
 
-    $body = @{} | ConvertTo-Json
+    # Put the SB message JSON/text into the Integrate input as a STRING.
+    # ConvertTo-Json will escape quotes/newlines etc so the outer JSON stays valid.
+    $bodyObject = @{
+        inputs = @(
+            @{
+                name  = "jsonBody"
+                value = $raw
+            }
+        )
+    }
+
+    $body = $bodyObject | ConvertTo-Json -Depth 10 -Compress
+
+    # Optional: log a tiny body preview, not the whole thing (avoid noisy logs)
+    $bodyPreview = if ($body.Length -gt 500) { $body.Substring(0,500) + "..." } else { $body }
+    Write-Log -Message "Integrate POST body preview: $bodyPreview"
 
     try {
         $response = Invoke-RestMethodK -Method 'Post' -Uri $RuleUrl `

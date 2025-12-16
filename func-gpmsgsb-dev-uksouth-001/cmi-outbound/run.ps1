@@ -70,5 +70,3 @@ catch {
 
 # ── success ───────────────────────────────────────────────────────────────────
 Push-OutputBinding -Name Response -Value (TextOK "Successfully routed '$topicKey'")
-
-#gabe is awesome

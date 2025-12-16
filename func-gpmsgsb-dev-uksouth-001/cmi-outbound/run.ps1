@@ -1,4 +1,4 @@
-#cmi post run.ps1
+#run.ps1
 
 param(
     $Request,

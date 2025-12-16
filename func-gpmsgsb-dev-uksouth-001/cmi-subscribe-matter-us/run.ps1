@@ -3,7 +3,7 @@
 param($msg, $TriggerMetadata)
 
 $ErrorActionPreference = 'Stop'
-$__VERSION = 'sb-responses-v1.4'
+$__VERSION = 'sb-responses-v1.6'
 
 # ---------------------------
 # LOGGING WITH SUBSCRIBER CONTEXT
@@ -35,52 +35,21 @@ function Write-Log {
 }
 
 # ---------------------------
-# ENV CONFIG
+# ENV / CONFIG
 # ---------------------------
 
-$ClientId     = $env:intapp__clientId
-$ClientSecret = $env:intapp__clientSecret
-$TokenUrl     = $env:intapp__tokenUrl
-$ApiHost      = $env:intapp__apiHost
+# Auth code for Integrate rule execution
+$ibauthcode = $env:ibauthcode
 
-if (-not $ApiHost) {
-    Write-Log -Level 'ERROR' -Message "No API host defined in env:intapp__apiHost"
-    throw "Missing API Host"
+if (-not $ibauthcode) {
+    Write-Log -Level 'ERROR' -Message "Missing env:ibauthcode (IntegrateAuthenticationToken)."
+    throw "Missing ibauthcode"
 }
 
-$ApiUrl = "https://$ApiHost/Open.Services.REST/api/common/v1/virtualtables/sb-responses"
-
-# ---------------------------
-# TOKEN HELPER
-# ---------------------------
-
-function Get-IntappToken {
-    Write-Log -Message "Requesting token from $TokenUrl"
-
-    $body = @{
-        grant_type    = "client_credentials"
-        client_id     = $ClientId
-        client_secret = $ClientSecret
-    }
-
-    try {
-        $response = Invoke-RestMethod -Method Post -Uri $TokenUrl `
-            -ContentType "application/x-www-form-urlencoded" `
-            -Body $body
-
-        if ($response.access_token) {
-            Write-Log -Message "Successfully acquired access token."
-            return $response.access_token
-        }
-
-        Write-Log -Level 'ERROR' -Message "Token response missing access_token."
-        throw "No access_token field"
-    }
-    catch {
-        Write-Log -Level 'ERROR' -Message "Token request failed: $($_.Exception.Message)"
-        throw
-    }
-}
+# Rule execution endpoint
+$RuleHost = "auk3vdwkfinb01"
+$RuleId   = 1027
+$RuleUrl  = "https://$RuleHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
 
 # ---------------------------
 # DETERMINE TYPE (clients / matters / etc)
@@ -102,6 +71,49 @@ function Get-MessageType {
 }
 
 # ---------------------------
+# INVOKE-RM WITH "curl -k" BEHAVIOR
+# ---------------------------
+
+function Invoke-RestMethodK {
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$Method,
+        [hashtable]$Headers,
+        [string]$ContentType,
+        [string]$Body
+    )
+
+    # Preferred path: PowerShell 7+ native support
+    $irm = Get-Command Invoke-RestMethod -ErrorAction Stop
+    $hasSkip = $irm.Parameters.ContainsKey('SkipCertificateCheck')
+
+    if ($hasSkip) {
+        return Invoke-RestMethod -Method $Method -Uri $Uri `
+            -Headers $Headers `
+            -ContentType $ContentType `
+            -Body $Body `
+            -SkipCertificateCheck
+    }
+
+    # Fallback path: last-resort global callback (works for HttpWebRequest scenarios)
+    # NOTE: In some PS/NET combos this may not affect HttpClient. It's a best-effort fallback.
+    Write-Log -Level 'WARN' -Message "Invoke-RestMethod has no -SkipCertificateCheck in this runtime; using global cert bypass fallback."
+
+    $prev = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+    try {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+
+        return Invoke-RestMethod -Method $Method -Uri $Uri `
+            -Headers $Headers `
+            -ContentType $ContentType `
+            -Body $Body
+    }
+    finally {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $prev
+    }
+}
+
+# ---------------------------
 # MAIN EXECUTION
 # ---------------------------
 
@@ -111,7 +123,7 @@ try {
         return
     }
 
-    $raw = if ($msg -is [string]) { $msg } else { $msg | ConvertTo-Json -Depth 50 }
+    $raw  = if ($msg -is [string]) { $msg } else { $msg | ConvertTo-Json -Depth 50 }
     $size = $raw.Length
     Write-Log -Message "Received message. Size: $size bytes."
 
@@ -135,39 +147,38 @@ try {
         Write-Log -Message "Message text: $raw"
     }
 
-    # ---------------------------------------------
-    # Determine the TYPE (clients/matters/etc)
-    # ---------------------------------------------
     $msgType = Get-MessageType -Topic $TriggerMetadata.Topic
     Write-Log -Message "Message type derived as: $msgType"
 
     # -------------------------------------------------
-    # SEND TO INTAPP API
+    # EXECUTE INTEGRATE RULE (curl -k equivalent)
     # -------------------------------------------------
 
-    $token = Get-IntappToken
+    Write-Log -Message "Triggering Integrate rule execution: RuleId=$RuleId Host=$RuleHost wait_for_completion=-1 (TLS validate: OFF)"
 
-    $payload = @(
-        @{
-            timestamp = (Get-Date).ToString("o")
-            type      = $msgType   # <-- NEW FIELD ADDED HERE
-            payload   = $obj
-            status    = "ok"
-        }
-    ) | ConvertTo-Json -Depth 20
+    $headers = @{
+        accept = "application/xml"
+        IntegrateAuthenticationToken = $ibauthcode
+    }
 
-    Write-Log -Message "Sending payload to API: $ApiUrl"
+    $body = @{} | ConvertTo-Json
 
     try {
-        $response = Invoke-RestMethod -Method Put -Uri $ApiUrl `
-            -Headers @{ Authorization = "Bearer $token" } `
+        $response = Invoke-RestMethodK -Method 'Post' -Uri $RuleUrl `
+            -Headers $headers `
             -ContentType "application/json" `
-            -Body $payload
+            -Body $body
 
-        Write-Log -Message "API response received successfully."
+        Write-Log -Message "Rule execution triggered successfully."
+
+        if ($response) {
+            $respPreview = ($response | Out-String).Trim()
+            if ($respPreview.Length -gt 800) { $respPreview = $respPreview.Substring(0,800) + "..." }
+            Write-Log -Message "Rule API response (preview): $respPreview"
+        }
     }
     catch {
-        Write-Log -Level 'ERROR' -Message "API call failed: $($_.Exception.Message)"
+        Write-Log -Level 'ERROR' -Message "Rule execution call failed: $($_.Exception.Message)"
         throw
     }
 

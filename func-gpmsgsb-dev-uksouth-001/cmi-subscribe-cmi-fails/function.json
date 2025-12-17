@@ -1,0 +1,14 @@
+{
+  "bindings": [
+    {
+      "type": "serviceBusTrigger",
+      "direction": "in",
+      "name": "msg",
+      "topicName": "cmi-fails",
+      "subscriptionName": "cmi-fails",
+      "connection": "dev_service_bus"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}
+

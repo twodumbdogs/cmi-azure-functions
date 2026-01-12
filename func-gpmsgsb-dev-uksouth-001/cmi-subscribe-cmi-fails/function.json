@@ -6,7 +6,7 @@
       "name": "msg",
       "topicName": "cmi-fails",
       "subscriptionName": "cmi-fails",
-      "connection": "dev_service_bus"
+      "connection": "dev_service_bus_RBAC"
     }
   ],
   "scriptFile": "run.ps1"

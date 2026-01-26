@@ -16,28 +16,28 @@
       "name": "matter",
       "direction": "out",
       "type": "serviceBus",
-      "connection": "dev_service_bus_RBAC",
+      "connection": "service_bus_RBAC",
       "topicName": "cmi-matter"
     },
     {
       "name": "client",
       "direction": "out",
       "type": "serviceBus",
-      "connection": "dev_service_bus_RBAC",
+      "connection": "service_bus_RBAC",
       "topicName": "cmi-client"
     },
     {
       "name": "payor",
       "direction": "out",
       "type": "serviceBus",
-      "connection": "dev_service_bus_RBAC",
+      "connection": "service_bus_RBAC",
       "topicName": "cmi-payor"
     },
     {
       "name": "fails",
       "direction": "out",
       "type": "serviceBus",
-      "connection": "dev_service_bus_RBAC",
+      "connection": "service_bus_RBAC",
       "topicName": "cmi-fails"
     }
   ]

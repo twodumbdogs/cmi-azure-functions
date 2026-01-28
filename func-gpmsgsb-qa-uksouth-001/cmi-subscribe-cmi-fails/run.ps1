@@ -210,7 +210,7 @@ try {
     $embedded = @{
         timestamp    = (Get-Date).ToString("o")
         status       = "error"
-        topic        = $TriggerMetadata.Topic
+        topic        = $TriggerMetadata.topic
         payload      = $(if ($obj) { $obj } else { $raw })
     } | ConvertTo-Json -Depth 50 -Compress
 

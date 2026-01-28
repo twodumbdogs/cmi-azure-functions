@@ -32,13 +32,6 @@
       "type": "serviceBus",
       "connection": "service_bus_RBAC",
       "topicName": "cmi-payor"
-    },
-    {
-      "name": "fails",
-      "direction": "out",
-      "type": "serviceBus",
-      "connection": "service_bus_RBAC",
-      "topicName": "cmi-fails"
     }
   ]
 }

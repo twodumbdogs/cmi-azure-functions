@@ -1,14 +1,12 @@
 # run.ps1
-
 param($msg, $TriggerMetadata)
 
 $ErrorActionPreference = 'Stop'
-$__VERSION = 'sb-responses-v1.6'
+$__VERSION = 'sb-responses-v1.6-ib-rule'
 
 # ---------------------------
 # LOGGING WITH SUBSCRIBER CONTEXT
 # ---------------------------
-
 if ($TriggerMetadata) {
     $script:SubscriberId = if ($TriggerMetadata.Topic -and $TriggerMetadata.SubscriptionName) {
         "$($TriggerMetadata.Topic)/$($TriggerMetadata.SubscriptionName)"
@@ -35,88 +33,123 @@ function Write-Log {
 }
 
 # ---------------------------
-# ENV / CONFIG
+# ENV CONFIG (Integration Builder)
 # ---------------------------
+# REQUIRED: host used in URL (keeps SNI/Host header clean)
+# Examples:
+#   auk3vdwkfinb01
+#   auk3vdwkfinb01.ad.adsinternal.com
+$IbHost  = $env:intapp__ibHost
 
-# Auth code for Integrate rule execution
-$ibauthcode = $env:ibauthcode
+# OPTIONAL: private IP for TCP reachability preflight
+$IbIp    = $env:intapp__ibIp
 
-if (-not $ibauthcode) {
-    Write-Log -Level 'ERROR' -Message "Missing env:ibauthcode (IntegrateAuthenticationToken)."
-    throw "Missing ibauthcode"
-}
+# REQUIRED
+$RuleId  = $env:intapp__ibRuleId
+$IbToken = $env:intapp__ibToken
 
-# Rule execution endpoint
-$RuleHost = "auk3vdwkfinb01"
-$RuleId   = 1027
-$RuleUrl  = "https://$RuleHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
+if (-not $IbHost)  { Write-Log -Level 'ERROR' -Message "Missing env:intapp__ibHost";   throw "Missing ibHost" }
+if (-not $RuleId)  { Write-Log -Level 'ERROR' -Message "Missing env:intapp__ibRuleId"; throw "Missing ibRuleId" }
+if (-not $IbToken) { Write-Log -Level 'ERROR' -Message "Missing env:intapp__ibToken";  throw "Missing ibToken" }
+
+# matches your curl: wait_for_completion=-1
+$IbUrl = "https://$IbHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
+
+Write-Log -Message ("IB config: host={0} ip={1} ruleId={2}" -f $IbHost, ($(if ($IbIp) { $IbIp } else { '[none]' })), $RuleId)
 
 # ---------------------------
 # DETERMINE TYPE (clients / matters / etc)
 # ---------------------------
-
 function Get-MessageType {
-    param([string]$Topic)
+    param(
+        [string]$Topic,
+        $ParsedObject
+    )
 
-    if (-not $Topic) { return "unknown" }
+    # 1) Prefer payload hints if present
+    if ($null -ne $ParsedObject) {
+        foreach ($prop in @('type','Type','entityType','EntityType')) {
+            if ($ParsedObject.PSObject.Properties.Name -contains $prop) {
+                $val = [string]$ParsedObject.$prop
+                if ($val) { return $val }
+            }
+        }
+    }
 
-    # Topic format example: "compliance.clients.v1"
-    $parts = $Topic.Split('.', 4)
-
-    if ($parts.Count -ge 2) {
-        return $parts[1]   # clients, matters, etc.
+    # 2) Fallback to topic parsing
+    if ($Topic) {
+        if ($Topic -eq 'cmi-fails') { return 'fails' }
+        $parts = $Topic.Split('.', 4)  # e.g. compliance.clients.v1
+        if ($parts.Count -ge 2) { return $parts[1] }
     }
 
     return "unknown"
 }
 
 # ---------------------------
-# INVOKE-RM WITH "curl -k" BEHAVIOR
+# Helper: invoke REST ignoring TLS cert (-k equivalent)
 # ---------------------------
-
-function Invoke-RestMethodK {
+function Invoke-RestMethodInsecure {
     param(
+        [Parameter(Mandatory)][ValidateSet('GET','POST','PUT','PATCH','DELETE')]
+        [string]$Method,
         [Parameter(Mandatory)][string]$Uri,
-        [Parameter(Mandatory)][string]$Method,
         [hashtable]$Headers,
         [string]$ContentType,
         [string]$Body
     )
 
-    # Preferred path: PowerShell 7+ native support
     $irm = Get-Command Invoke-RestMethod -ErrorAction Stop
     $hasSkip = $irm.Parameters.ContainsKey('SkipCertificateCheck')
 
+    $params = @{
+        Method      = $Method
+        Uri         = $Uri
+        Headers     = $Headers
+        ContentType = $ContentType
+        Body        = $Body
+        ErrorAction = 'Stop'
+    }
+
     if ($hasSkip) {
-        return Invoke-RestMethod -Method $Method -Uri $Uri `
-            -Headers $Headers `
-            -ContentType $ContentType `
-            -Body $Body `
-            -SkipCertificateCheck
+        $params['SkipCertificateCheck'] = $true
+    }
+    else {
+        Write-Log -Level 'WARN' -Message "Invoke-RestMethod has no -SkipCertificateCheck in this runtime; TLS validation may still occur."
     }
 
-    # Fallback path: last-resort global callback (works for HttpWebRequest scenarios)
-    # NOTE: In some PS/NET combos this may not affect HttpClient. It's a best-effort fallback.
-    Write-Log -Level 'WARN' -Message "Invoke-RestMethod has no -SkipCertificateCheck in this runtime; using global cert bypass fallback."
+    return Invoke-RestMethod @params
+}
 
-    $prev = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+# ---------------------------
+# Helper: basic reachability hints (won't guarantee routing)
+# ---------------------------
+function Test-TcpPort {
+    param(
+        [Parameter(Mandatory)][string]$HostOrIp,
+        [int]$Port = 443,
+        [int]$TimeoutMs = 3000
+    )
+
     try {
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-
-        return Invoke-RestMethod -Method $Method -Uri $Uri `
-            -Headers $Headers `
-            -ContentType $ContentType `
-            -Body $Body
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $iar = $client.BeginConnect($HostOrIp, $Port, $null, $null)
+        if (-not $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+            $client.Close()
+            return $false
+        }
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
     }
-    finally {
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $prev
+    catch {
+        return $false
     }
 }
 
 # ---------------------------
 # MAIN EXECUTION
 # ---------------------------
-
 try {
     if (-not $msg) {
         Write-Log -Level 'WARN' -Message "Received an empty or null message — skipping."
@@ -136,64 +169,111 @@ try {
     }
 
     if ($obj) {
-        $preview = @{
-            eventType = $obj.EventType
-            requestId = $obj.RequestID
-            clientId  = $obj.ClientId
-        } | ConvertTo-Json -Depth 5
-        Write-Log -Message "Parsed JSON preview: $preview"
+        $preview = @{}
+        foreach ($k in @('EventType','RequestID','ClientId','MatterId','CorrelationId')) {
+            if ($obj.PSObject.Properties.Name -contains $k) { $preview[$k] = $obj.$k }
+        }
+        $previewJson = ($preview | ConvertTo-Json -Depth 5)
+        Write-Log -Message "Parsed JSON preview: $previewJson"
     }
     else {
-        Write-Log -Message "Message text: $raw"
+        $textPreview = if ($raw.Length -gt 1000) { $raw.Substring(0,1000) + "..." } else { $raw }
+        Write-Log -Message "Message text (preview): $textPreview"
     }
 
-    $msgType = Get-MessageType -Topic $TriggerMetadata.Topic
+    $msgType = Get-MessageType -Topic $TriggerMetadata.Topic -ParsedObject $obj
     Write-Log -Message "Message type derived as: $msgType"
 
-    # -------------------------------------------------
-    # EXECUTE INTEGRATE RULE (curl -k equivalent)
-    # -------------------------------------------------
-
-    Write-Log -Message "Triggering Integrate rule execution: RuleId=$RuleId Host=$RuleHost wait_for_completion=-1 (TLS validate: OFF)"
-
-    $headers = @{
-        accept = "application/xml"
-        IntegrateAuthenticationToken = $ibauthcode
+    # Optional TCP preflight (only if ibIp provided)
+    if ($IbIp) {
+        $tcpOk = Test-TcpPort -HostOrIp $IbIp -Port 443 -TimeoutMs 3000
+        if ($tcpOk) {
+            Write-Log -Message "Preflight TCP check: $IbIp:443 is reachable (at least from here)."
+        }
+        else {
+            Write-Log -Level 'WARN' -Message "Preflight TCP check: $IbIp:443 NOT reachable. If this is private, you likely need VNET integration/routing."
+        }
+    }
+    else {
+        Write-Log -Level 'INFO' -Message "Skipping TCP preflight (env:intapp__ibIp not set)."
     }
 
-    # Put the SB message JSON/text into the Integrate input as a STRING.
-    # ConvertTo-Json will escape quotes/newlines etc so the outer JSON stays valid.
-    $bodyObject = @{
+    # Build IB embedded jsonBody string (metadata + payload)
+    $topicName = $null
+    try { $topicName = $TriggerMetadata.Topic } catch { $topicName = $null }
+
+    $embedded = @{
+        timestamp   = (Get-Date).ToString("o")
+        messageType = $msgType
+        topic       = $(if ($topicName) { $topicName } else { 'unknown' })
+        subscriber  = $script:SubscriberId
+        payload     = $(if ($obj) { $obj } else { $raw })
+    } | ConvertTo-Json -Depth 50 -Compress
+
+    Write-Log -Message "IB jsonBody length: $($embedded.Length) chars"
+
+    # Build IB request wrapper
+    $ibRequest = @{
         inputs = @(
             @{
                 name  = "jsonBody"
-                value = $raw
+                value = $embedded
             }
         )
+    } | ConvertTo-Json -Depth 10 -Compress
+
+    $headers = @{
+        IntegrateAuthenticationToken = $IbToken
+        accept = "application/json"
     }
 
-    $body = $bodyObject | ConvertTo-Json -Depth 10 -Compress
-
-    # Optional: log a tiny body preview, not the whole thing (avoid noisy logs)
-    $bodyPreview = if ($body.Length -gt 500) { $body.Substring(0,500) + "..." } else { $body }
-    Write-Log -Message "Integrate POST body preview: $bodyPreview"
+    Write-Log -Message "Calling Integration Builder rule: $IbUrl"
 
     try {
-        $response = Invoke-RestMethodK -Method 'Post' -Uri $RuleUrl `
-            -Headers $headers `
-            -ContentType "application/json" `
-            -Body $body
+        $resp = Invoke-RestMethodInsecure -Method 'POST' -Uri $IbUrl -Headers $headers -ContentType 'application/json' -Body $ibRequest
 
-        Write-Log -Message "Rule execution triggered successfully."
+        $respText = $null
+        try { $respText = ($resp | Out-String).Trim() } catch { $respText = "[unprintable response]" }
 
-        if ($response) {
-            $respPreview = ($response | Out-String).Trim()
-            if ($respPreview.Length -gt 800) { $respPreview = $respPreview.Substring(0,800) + "..." }
-            Write-Log -Message "Rule API response (preview): $respPreview"
+        if ($respText) {
+            if ($respText.Length -gt 2000) { $respText = $respText.Substring(0,2000) + "..." }
+            Write-Log -Message "IB response (truncated): $respText"
+        }
+        else {
+            Write-Log -Message "IB response received (empty body)."
         }
     }
     catch {
-        Write-Log -Level 'ERROR' -Message "Rule execution call failed: $($_.Exception.Message)"
+        # Try to capture any response body (useful for XML/HTML error responses)
+        $body = $null
+        try {
+            $respObj = $_.Exception.Response
+            if ($respObj) {
+                # Works best when Invoke-RestMethod is backed by HttpClient in PS 7+
+                if ($respObj.Content) {
+                    $body = $respObj.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                }
+                else {
+                    # Fallback for WebResponse
+                    $stream = $respObj.GetResponseStream()
+                    if ($stream) {
+                        $reader = [System.IO.StreamReader]::new($stream)
+                        $body = $reader.ReadToEnd()
+                        $reader.Close()
+                        $stream.Close()
+                    }
+                }
+            }
+        } catch { }
+
+        if ($body) {
+            if ($body.Length -gt 2000) { $body = $body.Substring(0,2000) + "..." }
+            Write-Log -Level 'ERROR' -Message "IB rule execution failed: $($_.Exception.Message) Body: $body"
+        }
+        else {
+            Write-Log -Level 'ERROR' -Message "IB rule execution failed: $($_.Exception.Message)"
+        }
+
         throw
     }
 
@@ -201,14 +281,5 @@ try {
 }
 catch {
     Write-Log -Level 'ERROR' -Message "Unhandled error: $($_.Exception.Message)`n$($_ | Out-String)"
-
-    try {
-        Push-OutputBinding -Name fails -Value $msg
-        Write-Log -Level 'WARN' -Message "Moved failed message to 'fails' topic."
-    }
-    catch {
-        Write-Log -Level 'ERROR' -Message "Could not route to fails topic: $($_.Exception.Message)"
-    }
-
     throw
 }

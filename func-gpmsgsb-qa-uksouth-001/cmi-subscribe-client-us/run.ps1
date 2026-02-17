@@ -184,6 +184,13 @@ try {
     $msgType = Get-MessageType -Topic $TriggerMetadata.Topic -ParsedObject $obj
     Write-Log -Message "Message type derived as: $msgType"
 
+    # Subscription name for IB input
+    $subscriptionName = $null
+    try { $subscriptionName = [string]$TriggerMetadata.SubscriptionName } catch { $subscriptionName = $null }
+    if ([string]::IsNullOrWhiteSpace($subscriptionName)) { $subscriptionName = 'unknown' }
+
+    Write-Log -Message "Trigger subscription: $subscriptionName"
+
     # Optional TCP preflight (only if ibIp provided)
     if ($IbIp) {
         $tcpOk = Test-TcpPort -HostOrIp $IbIp -Port 443 -TimeoutMs 3000
@@ -198,7 +205,7 @@ try {
         Write-Log -Level 'INFO' -Message "Skipping TCP preflight (env:intapp__ibIp not set)."
     }
 
-    # Build IB embedded jsonBody string (metadata + payload)
+    # Build IB embedded errorBody string (metadata + payload)
     $topicName = $null
     try { $topicName = $TriggerMetadata.Topic } catch { $topicName = $null }
 
@@ -210,14 +217,19 @@ try {
         payload     = $(if ($obj) { $obj } else { $raw })
     } | ConvertTo-Json -Depth 50 -Compress
 
-    Write-Log -Message "IB jsonBody length: $($embedded.Length) chars"
+    Write-Log -Message "IB errorBody length: $($embedded.Length) chars"
 
     # Build IB request wrapper
+    # CHANGE: send payload to "errorBody" AND send subscription separately
     $ibRequest = @{
         inputs = @(
             @{
-                name  = "jsonBody"
+                name  = "errorBody"
                 value = $embedded
+            },
+            @{
+                name  = "subscription"
+                value = $subscriptionName
             }
         )
     } | ConvertTo-Json -Depth 10 -Compress
@@ -249,12 +261,10 @@ try {
         try {
             $respObj = $_.Exception.Response
             if ($respObj) {
-                # Works best when Invoke-RestMethod is backed by HttpClient in PS 7+
                 if ($respObj.Content) {
                     $body = $respObj.Content.ReadAsStringAsync().GetAwaiter().GetResult()
                 }
                 else {
-                    # Fallback for WebResponse
                     $stream = $respObj.GetResponseStream()
                     if ($stream) {
                         $reader = [System.IO.StreamReader]::new($stream)

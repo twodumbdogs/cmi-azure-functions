@@ -166,22 +166,26 @@ try {
         LogInfo "INFO: Skipping TCP preflight (env:intapp__ibIp not set)."
     }
 
-    $embedded = @{
-        timestamp   = (Get-Date).ToString("o")
-        status      = $routeStatus         # ok/error
-        topicKey    = $topicKey
-        routedTo    = $routeTarget         # matter/client/payor or null
-        payload     = $body
-    } | ConvertTo-Json -Depth 50 -Compress
+    $embedded = @"
+{
+  "timestamp": "$(Get-Date -Format o)",
+  "status": "$routeStatus",
+  "topicKey": "$topicKey",
+  "routedTo": $(if ($routeTarget) { '"' + $routeTarget + '"' } else { 'null' }),
+  "payload": $($body | ConvertTo-Json -Depth 50 -Compress)
+}
+"@
 
-    LogInfo "IB jsonBody length: $($embedded.Length) chars"
+    LogInfo "IB jsonBody length (embedded): $($embedded.Length) chars"
     LogInfo "IB status sent: $routeStatus"
 
+    # CHANGE: send RAW body to IB input instead of $embedded
+    # This preserves the original JSON key order/format exactly as received.
     $ibRequest = @{
         inputs = @(
             @{
                 name  = "jsonBody"
-                value = $embedded
+                value = [string]$raw
             }
         )
     } | ConvertTo-Json -Depth 10
@@ -203,7 +207,6 @@ if ($routeStatus -eq 'ok') {
     Push-OutputBinding -Name Response -Value (TextOK "Routed '$topicKey' to SB ($routeTarget) and sent to IB (status=ok)")
 }
 else {
-    # You can decide if you still want HTTP 200 for "bad route".
-    # Keeping 200 is fine if you want callers to not retry. If you want callers to fix input, return 400.
+    # Keeping 200 so callers don't retry forever; adjust to 400 if you want them to fix input.
     Push-OutputBinding -Name Response -Value (TextOK "No SB route for '$topicKey'. Sent to IB only (status=error).")
 }

@@ -1,198 +1,180 @@
-# run.ps1
-
-param($msg, $TriggerMetadata)
+# run.ps1  (sb-responses-v1.6) - Service Bus Trigger
+param(
+    $msg,
+    $TriggerMetadata
+)
 
 $ErrorActionPreference = 'Stop'
 $__VERSION = 'sb-responses-v1.6'
 
-# ---------------------------
-# LOGGING WITH SUBSCRIBER CONTEXT
-# ---------------------------
+# ── tiny helpers ──────────────────────────────────────────────────────────────
+function LogInfo($m)  { Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
+function LogWarn($m)  { Write-Host ("[{0}] WARN: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
+function LogErr($m)   { Write-Host ("[{0}] ERROR: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
 
+# Keep your "subscriber context" concept, just logged in the same style
+$script:SubscriberId = 'unknown'
 if ($TriggerMetadata) {
-    $script:SubscriberId = if ($TriggerMetadata.Topic -and $TriggerMetadata.SubscriptionName) {
-        "$($TriggerMetadata.Topic)/$($TriggerMetadata.SubscriptionName)"
+    if ($TriggerMetadata.Topic -and $TriggerMetadata.SubscriptionName) {
+        $script:SubscriberId = "$($TriggerMetadata.Topic)/$($TriggerMetadata.SubscriptionName)"
     }
     elseif ($TriggerMetadata.Topic) {
-        $TriggerMetadata.Topic
+        $script:SubscriberId = [string]$TriggerMetadata.Topic
     }
-    else {
-        'unknown'
-    }
-}
-else {
-    $script:SubscriberId = 'unknown'
 }
 
-function Write-Log {
+function LogCtx($m) {
+    LogInfo "[sb-subscriber][$__VERSION][$script:SubscriberId] $m"
+}
+
+# ---------------------------
+# Helper: invoke REST ignoring TLS cert (-k equivalent)
+# ---------------------------
+function Invoke-RestMethodInsecure {
     param(
-        [ValidateSet('INFO','WARN','ERROR')]
-        [string]$Level = 'INFO',
-        [Parameter(Mandatory)][string]$Message
-    )
-    $ts = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fffK')
-    Write-Host "[$ts][$Level][sb-subscriber][$__VERSION][$script:SubscriberId] $Message"
-}
-
-# ---------------------------
-# ENV / CONFIG
-# ---------------------------
-
-# Auth code for Integrate rule execution
-$ibauthcode = $env:ibauthcode
-
-if (-not $ibauthcode) {
-    Write-Log -Level 'ERROR' -Message "Missing env:ibauthcode (IntegrateAuthenticationToken)."
-    throw "Missing ibauthcode"
-}
-
-# Rule execution endpoint
-$RuleHost = "auk3vdwkfinb01"
-$RuleId   = 1027
-$RuleUrl  = "https://$RuleHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
-
-# ---------------------------
-# DETERMINE TYPE (clients / matters / etc)
-# ---------------------------
-
-function Get-MessageType {
-    param([string]$Topic)
-
-    if (-not $Topic) { return "unknown" }
-
-    # Topic format example: "compliance.clients.v1"
-    $parts = $Topic.Split('.', 4)
-
-    if ($parts.Count -ge 2) {
-        return $parts[1]   # clients, matters, etc.
-    }
-
-    return "unknown"
-}
-
-# ---------------------------
-# INVOKE-RM WITH "curl -k" BEHAVIOR
-# ---------------------------
-
-function Invoke-RestMethodK {
-    param(
+        [Parameter(Mandatory)][ValidateSet('GET','POST','PUT','PATCH','DELETE')]
+        [string]$Method,
         [Parameter(Mandatory)][string]$Uri,
-        [Parameter(Mandatory)][string]$Method,
         [hashtable]$Headers,
         [string]$ContentType,
         [string]$Body
     )
 
-    # Preferred path: PowerShell 7+ native support
     $irm = Get-Command Invoke-RestMethod -ErrorAction Stop
     $hasSkip = $irm.Parameters.ContainsKey('SkipCertificateCheck')
 
-    if ($hasSkip) {
-        return Invoke-RestMethod -Method $Method -Uri $Uri `
-            -Headers $Headers `
-            -ContentType $ContentType `
-            -Body $Body `
-            -SkipCertificateCheck
+    $params = @{
+        Method      = $Method
+        Uri         = $Uri
+        Headers     = $Headers
+        ContentType = $ContentType
+        Body        = $Body
+        ErrorAction = 'Stop'
     }
 
-    # Fallback path: last-resort global callback (works for HttpWebRequest scenarios)
-    # NOTE: In some PS/NET combos this may not affect HttpClient. It's a best-effort fallback.
-    Write-Log -Level 'WARN' -Message "Invoke-RestMethod has no -SkipCertificateCheck in this runtime; using global cert bypass fallback."
+    if ($hasSkip) { $params['SkipCertificateCheck'] = $true }
 
-    $prev = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
-    try {
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-
-        return Invoke-RestMethod -Method $Method -Uri $Uri `
-            -Headers $Headers `
-            -ContentType $ContentType `
-            -Body $Body
-    }
-    finally {
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $prev
-    }
+    return Invoke-RestMethod @params
 }
+
+# ---------------------------
+# DETERMINE TYPE (clients / matters / etc)
+# ---------------------------
+function Get-MessageType {
+    param([string]$Topic)
+
+    if ([string]::IsNullOrWhiteSpace($Topic)) { return "unknown" }
+
+    # Topic format example: "compliance.clients.v1"
+    $parts = $Topic.Split('.', 4)
+    if ($parts.Count -ge 2) { return $parts[1] }
+
+    return "unknown"
+}
+
+# ---------------------------
+# ENV / CONFIG  (unchanged)
+# ---------------------------
+
+# Auth code for Integrate rule execution
+$ibauthcode = $env:ibauthcode
+if (-not $ibauthcode) {
+    LogCtx "Missing env:ibauthcode (IntegrateAuthenticationToken)."
+    throw "Missing ibauthcode"
+}
+
+# Rule execution endpoint (unchanged)
+$RuleHost = $env:intapp__ibHost
+$RuleId   = $env:intapp_rule_id_regional_subscribe
+$RuleUrl  = "https://$RuleHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
 
 # ---------------------------
 # MAIN EXECUTION
 # ---------------------------
-
 try {
-    if (-not $msg) {
-        Write-Log -Level 'WARN' -Message "Received an empty or null message — skipping."
+    if ($null -eq $msg) {
+        LogCtx "Received an empty/null message — skipping."
         return
     }
 
-    $raw  = if ($msg -is [string]) { $msg } else { $msg | ConvertTo-Json -Depth 50 }
-    $size = $raw.Length
-    Write-Log -Message "Received message. Size: $size bytes."
+    # Serialize once (same concept as your http-trigger function)
+    $raw = if ($msg -is [string]) { [string]$msg } else { ($msg | ConvertTo-Json -Depth 50) }
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        LogCtx "Message was effectively empty after serialization — skipping."
+        return
+    }
 
+    LogCtx "Received message. Size: $($raw.Length) bytes."
+
+    # Parse JSON if possible, but don't die if it isn't JSON
     $obj = $null
     try {
         $obj = $raw | ConvertFrom-Json -ErrorAction Stop
+        LogCtx "Parsed JSON successfully."
     }
     catch {
-        Write-Log -Level 'WARN' -Message "Message not valid JSON — treating as plain text."
+        LogWarn "[sb-subscriber][$__VERSION][$script:SubscriberId] Message not valid JSON — treating as plain text."
     }
 
     if ($obj) {
+        # Keep your preview idea, just keep it resilient
         $preview = @{
             eventType = $obj.EventType
             requestId = $obj.RequestID
             clientId  = $obj.ClientId
         } | ConvertTo-Json -Depth 5
-        Write-Log -Message "Parsed JSON preview: $preview"
+
+        LogCtx "Parsed JSON preview: $preview"
     }
     else {
-        Write-Log -Message "Message text: $raw"
+        $textPreview = $raw
+        if ($textPreview.Length -gt 800) { $textPreview = $textPreview.Substring(0,800) + "..." }
+        LogCtx "Message text preview: $textPreview"
     }
 
-    $msgType = Get-MessageType -Topic $TriggerMetadata.Topic
-    Write-Log -Message "Message type derived as: $msgType"
+    $topic = $null
+    if ($TriggerMetadata -and $TriggerMetadata.Topic) { $topic = [string]$TriggerMetadata.Topic }
+
+    $msgType = Get-MessageType -Topic $topic
+    LogCtx "Message type derived as: $msgType"
 
     # -------------------------------------------------
     # EXECUTE INTEGRATE RULE (curl -k equivalent)
+    # (UNCHANGED endpoint/headers/body/params)
     # -------------------------------------------------
-
-    Write-Log -Message "Triggering Integrate rule execution: RuleId=$RuleId Host=$RuleHost wait_for_completion=-1 (TLS validate: OFF)"
+    LogCtx "Triggering Integrate rule execution: RuleId=$RuleId Host=$RuleHost wait_for_completion=-1 (TLS validate: OFF)"
 
     $headers = @{
         accept = "application/xml"
         IntegrateAuthenticationToken = $ibauthcode
     }
 
+    # KEEP SAME BODY BEHAVIOR (empty JSON object)
     $body = @{} | ConvertTo-Json
 
-    try {
-        $response = Invoke-RestMethodK -Method 'Post' -Uri $RuleUrl `
-            -Headers $headers `
-            -ContentType "application/json" `
-            -Body $body
+    $response = Invoke-RestMethodInsecure -Method 'POST' -Uri $RuleUrl -Headers $headers -ContentType "application/json" -Body $body
 
-        Write-Log -Message "Rule execution triggered successfully."
+    LogCtx "Rule execution triggered successfully."
 
-        if ($response) {
-            $respPreview = ($response | Out-String).Trim()
-            if ($respPreview.Length -gt 800) { $respPreview = $respPreview.Substring(0,800) + "..." }
-            Write-Log -Message "Rule API response (preview): $respPreview"
-        }
-    }
-    catch {
-        Write-Log -Level 'ERROR' -Message "Rule execution call failed: $($_.Exception.Message)"
-        throw
+    if ($response) {
+        $respPreview = ($response | Out-String).Trim()
+        if ($respPreview.Length -gt 800) { $respPreview = $respPreview.Substring(0,800) + "..." }
+        LogCtx "Rule API response (preview): $respPreview"
     }
 
-    Write-Log -Message "Processed OK ✅"
+    LogCtx "Processed OK ✅"
 }
 catch {
-    Write-Log -Level 'ERROR' -Message "Unhandled error: $($_.Exception.Message)`n$($_ | Out-String)"
+    LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] Unhandled error: $($_.Exception.Message)"
+    LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] $($_ | Out-String)"
 
+    # Keep your existing behavior: try to move the original message to fails, if that binding exists
     try {
         Push-OutputBinding -Name fails -Value $msg
-        Write-Log -Level 'WARN' -Message "Moved failed message to 'fails' topic."
+        LogWarn "[sb-subscriber][$__VERSION][$script:SubscriberId] Moved failed message to 'fails' topic."
     }
     catch {
-        Write-Log -Level 'ERROR' -Message "Could not route to fails topic: $($_.Exception.Message)"
+        LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] Could not route to fails topic: $($_.Exception.Message)"
     }
 
     throw

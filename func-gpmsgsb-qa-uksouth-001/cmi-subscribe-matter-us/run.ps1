@@ -8,11 +8,11 @@ $ErrorActionPreference = 'Stop'
 $__VERSION = 'sb-responses-v1.6'
 
 # ── tiny helpers ──────────────────────────────────────────────────────────────
-function LogInfo($m)  { Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
-function LogWarn($m)  { Write-Host ("[{0}] WARN: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
-function LogErr($m)   { Write-Host ("[{0}] ERROR: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
+function LogInfo($m) { Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
+function LogWarn($m) { Write-Host ("[{0}] WARN: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
+function LogErr($m)  { Write-Host ("[{0}] ERROR: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }
 
-# Keep your "subscriber context" concept, just logged in the same style
+# Subscriber context (Service Bus Topic/Subscription)
 $script:SubscriberId = 'unknown'
 if ($TriggerMetadata) {
     if ($TriggerMetadata.Topic -and $TriggerMetadata.SubscriptionName) {
@@ -28,7 +28,77 @@ function LogCtx($m) {
 }
 
 # ---------------------------
-# Helper: invoke REST ignoring TLS cert (-k equivalent)
+# Helper: resolve Function name (reliable across hosting variants)
+# ---------------------------
+function Get-FunctionName {
+    param($TriggerMetadata)
+
+    # 1) Trigger metadata (best when present)
+    try {
+        if ($TriggerMetadata) {
+            if ($TriggerMetadata.FunctionName) { return [string]$TriggerMetadata.FunctionName }
+            if ($TriggerMetadata.functionName) { return [string]$TriggerMetadata.functionName }
+
+            if ($TriggerMetadata -is [hashtable]) {
+                foreach ($k in @('FunctionName','functionName','AzureWebJobsFunctionName','FUNCTIONS_FUNCTION_NAME','FUNCTION_NAME')) {
+                    if ($TriggerMetadata.ContainsKey($k) -and $TriggerMetadata[$k]) {
+                        return [string]$TriggerMetadata[$k]
+                    }
+                }
+            }
+        }
+    }
+    catch { }
+
+    # 2) Environment variables (varies by runtime/hosting)
+    foreach ($k in @('AzureWebJobsFunctionName','FUNCTIONS_FUNCTION_NAME','FUNCTION_NAME')) {
+        try {
+            $v = [string](Get-Item -Path "Env:$k" -ErrorAction SilentlyContinue).Value
+            if (-not [string]::IsNullOrWhiteSpace($v)) { return $v }
+        }
+        catch { }
+    }
+
+    # 3) Fallback: Function App name (better than unknown)
+    if (-not [string]::IsNullOrWhiteSpace($env:WEBSITE_SITE_NAME)) {
+        return [string]$env:WEBSITE_SITE_NAME
+    }
+
+    return 'unknown-function'
+}
+
+# ---------------------------
+# TCP preflight check
+# ---------------------------
+function Test-TcpPort {
+    param(
+        [Parameter(Mandatory)][string]$HostOrIp,
+        [Parameter(Mandatory)][int]$Port,
+        [int]$TimeoutMs = 3000
+    )
+
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $iar = $client.BeginConnect($HostOrIp, $Port, $null, $null)
+        $ok = $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
+
+        if (-not $ok) {
+            try { $client.Close() } catch {}
+            return $false
+        }
+
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
+    }
+    catch {
+        try { $client.Close() } catch {}
+        return $false
+    }
+}
+
+# ---------------------------
+# Invoke REST ignoring TLS cert
 # ---------------------------
 function Invoke-RestMethodInsecure {
     param(
@@ -58,123 +128,118 @@ function Invoke-RestMethodInsecure {
 }
 
 # ---------------------------
-# DETERMINE TYPE (clients / matters / etc)
+# Determine message type
 # ---------------------------
 function Get-MessageType {
     param([string]$Topic)
 
     if ([string]::IsNullOrWhiteSpace($Topic)) { return "unknown" }
 
-    # Topic format example: "compliance.clients.v1"
-    $parts = $Topic.Split('.', 4)
+    $parts = $Topic.Split('.',4)
     if ($parts.Count -ge 2) { return $parts[1] }
 
     return "unknown"
 }
 
 # ---------------------------
-# ENV / CONFIG  (unchanged)
+# ENV / CONFIG
 # ---------------------------
+try {
+    $IbHost  = $env:intapp__ibHost
+    $IbIp    = $env:intapp__ibIp
+    $RuleId  = $env:intapp__rule_id_regional_subscribe
+    $IbToken = $env:intapp__ibToken
 
-# Auth code for Integrate rule execution
-$ibauthcode = $env:ibauthcode
-if (-not $ibauthcode) {
-    LogCtx "Missing env:ibauthcode (IntegrateAuthenticationToken)."
-    throw "Missing ibauthcode"
+    if (-not $IbHost)  { throw "Missing env:intapp__ibHost" }
+    if (-not $RuleId)  { throw "Missing env:intapp__rule_id_regional_subscribe" }
+    if (-not $IbToken) { throw "Missing env:intapp__ibToken" }
+
+    $RuleUrl = "https://$IbHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
+
+    $ipShown = if ($IbIp) { $IbIp } else { '[none]' }
+    LogCtx ("IB config: host={0} ip={1} ruleId={2}" -f $IbHost, $ipShown, $RuleId)
+
+    if ($IbIp) {
+        if (Test-TcpPort -HostOrIp $IbIp -Port 443) {
+            LogCtx "Preflight TCP check: $IbIp:443 reachable."
+        }
+        else {
+            LogWarn "Preflight TCP check: $IbIp:443 NOT reachable."
+        }
+    }
 }
-
-# Rule execution endpoint (unchanged)
-$RuleHost = $env:intapp__ibHost
-$RuleId   = $env:intapp_rule_id_regional_subscribe
-$RuleUrl  = "https://$RuleHost/api/v1/rules/$RuleId/execution?wait_for_completion=-1"
+catch {
+    LogErr "IB configuration error: $($_.Exception.Message)"
+    throw
+}
 
 # ---------------------------
 # MAIN EXECUTION
 # ---------------------------
 try {
     if ($null -eq $msg) {
-        LogCtx "Received an empty/null message — skipping."
+        LogCtx "Received null message — skipping."
         return
     }
 
-    # Serialize once (same concept as your http-trigger function)
-    $raw = if ($msg -is [string]) { [string]$msg } else { ($msg | ConvertTo-Json -Depth 50) }
+    $raw = if ($msg -is [string]) { $msg } else { ($msg | ConvertTo-Json -Depth 50) }
+
     if ([string]::IsNullOrWhiteSpace($raw)) {
-        LogCtx "Message was effectively empty after serialization — skipping."
+        LogCtx "Message empty after serialization — skipping."
         return
     }
 
     LogCtx "Received message. Size: $($raw.Length) bytes."
 
-    # Parse JSON if possible, but don't die if it isn't JSON
-    $obj = $null
-    try {
-        $obj = $raw | ConvertFrom-Json -ErrorAction Stop
-        LogCtx "Parsed JSON successfully."
-    }
-    catch {
-        LogWarn "[sb-subscriber][$__VERSION][$script:SubscriberId] Message not valid JSON — treating as plain text."
-    }
+    $topic = if ($TriggerMetadata -and $TriggerMetadata.Topic) { [string]$TriggerMetadata.Topic } else { $null }
 
-    if ($obj) {
-        # Keep your preview idea, just keep it resilient
-        $preview = @{
-            eventType = $obj.EventType
-            requestId = $obj.RequestID
-            clientId  = $obj.ClientId
-        } | ConvertTo-Json -Depth 5
-
-        LogCtx "Parsed JSON preview: $preview"
-    }
-    else {
-        $textPreview = $raw
-        if ($textPreview.Length -gt 800) { $textPreview = $textPreview.Substring(0,800) + "..." }
-        LogCtx "Message text preview: $textPreview"
-    }
-
-    $topic = $null
-    if ($TriggerMetadata -and $TriggerMetadata.Topic) { $topic = [string]$TriggerMetadata.Topic }
+    # ✅ Use the FUNCTION NAME as region-subscription (robust resolver)
+    $functionName = Get-FunctionName -TriggerMetadata $TriggerMetadata
+    LogCtx ("Function name resolved as: {0} (EnvHints: AzureWebJobsFunctionName='{1}' FUNCTIONS_FUNCTION_NAME='{2}' WEBSITE_SITE_NAME='{3}')" -f `
+        $functionName, $env:AzureWebJobsFunctionName, $env:FUNCTIONS_FUNCTION_NAME, $env:WEBSITE_SITE_NAME)
 
     $msgType = Get-MessageType -Topic $topic
-    LogCtx "Message type derived as: $msgType"
+    $receivedUtc = (Get-Date).ToUniversalTime().ToString("o")
 
     # -------------------------------------------------
-    # EXECUTE INTEGRATE RULE (curl -k equivalent)
-    # (UNCHANGED endpoint/headers/body/params)
+    # Build IB inputs (REGION PREFIXED)
     # -------------------------------------------------
-    LogCtx "Triggering Integrate rule execution: RuleId=$RuleId Host=$RuleHost wait_for_completion=-1 (TLS validate: OFF)"
+    $inputs = @(
+        @{ name="region-body";         value=[string]$raw }
+        @{ name="region-topic";        value=[string]$topic }
+        @{ name="region-subscription"; value=[string]$functionName }   # 👈 function name now
+        @{ name="region-subscriberId"; value=[string]$script:SubscriberId }
+        @{ name="region-messageType";  value=[string]$msgType }
+        @{ name="region-receivedUtc";  value=[string]$receivedUtc }
+    )
+
+    $ibRequest = @{ inputs = $inputs } | ConvertTo-Json -Depth 10
+    LogCtx "IB request built with $($inputs.Count) region inputs. region-subscription=$functionName"
 
     $headers = @{
         accept = "application/xml"
-        IntegrateAuthenticationToken = $ibauthcode
+        IntegrateAuthenticationToken = $IbToken
     }
 
-    # KEEP SAME BODY BEHAVIOR (empty JSON object)
-    $body = @{} | ConvertTo-Json
-
-    $response = Invoke-RestMethodInsecure -Method 'POST' -Uri $RuleUrl -Headers $headers -ContentType "application/json" -Body $body
+    $response = Invoke-RestMethodInsecure `
+        -Method POST `
+        -Uri $RuleUrl `
+        -Headers $headers `
+        -ContentType "application/json" `
+        -Body $ibRequest
 
     LogCtx "Rule execution triggered successfully."
-
-    if ($response) {
-        $respPreview = ($response | Out-String).Trim()
-        if ($respPreview.Length -gt 800) { $respPreview = $respPreview.Substring(0,800) + "..." }
-        LogCtx "Rule API response (preview): $respPreview"
-    }
-
-    LogCtx "Processed OK ✅"
 }
 catch {
-    LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] Unhandled error: $($_.Exception.Message)"
-    LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] $($_ | Out-String)"
+    LogErr "Unhandled error: $($_.Exception.Message)"
+    LogErr ($_ | Out-String)
 
-    # Keep your existing behavior: try to move the original message to fails, if that binding exists
     try {
         Push-OutputBinding -Name fails -Value $msg
-        LogWarn "[sb-subscriber][$__VERSION][$script:SubscriberId] Moved failed message to 'fails' topic."
+        LogWarn "Moved failed message to 'fails' topic."
     }
     catch {
-        LogErr "[sb-subscriber][$__VERSION][$script:SubscriberId] Could not route to fails topic: $($_.Exception.Message)"
+        LogErr "Could not route to fails topic: $($_.Exception.Message)"
     }
 
     throw

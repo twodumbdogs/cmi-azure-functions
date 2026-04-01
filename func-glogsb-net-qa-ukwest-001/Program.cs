@@ -1,14 +1,28 @@
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Builder;
+using Azure.Identity;
+using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using func_glogsb_net_qa_ukwest_001;
 
-var builder = FunctionsApplication.CreateBuilder(args);
+var host = new HostBuilder()
+    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureServices(services =>
+    {
+        services.AddSingleton(sp =>
+        {
+            var fullyQualifiedNamespace =
+                 Environment.GetEnvironmentVariable("service_bus_RBAC__fullyQualifiedNamespace")
+                 ?? throw new InvalidOperationException("Missing env var: service_bus_RBAC__fullyQualifiedNamespace");
 
-builder.ConfigureFunctionsWebApplication();
+            return new ServiceBusClient(
+                fullyQualifiedNamespace,
+                new DefaultAzureCredential());
+        });
 
-builder.Services
-    .AddApplicationInsightsTelemetryWorkerService()
-    .ConfigureFunctionsApplicationInsights();
+        services.AddSingleton<JsonMergeService>();
+        services.AddSingleton<PayloadLookupService>();
+        services.AddSingleton<ServiceBusPublisher>();
+    })
+    .Build();
 
-builder.Build().Run();
+host.Run();

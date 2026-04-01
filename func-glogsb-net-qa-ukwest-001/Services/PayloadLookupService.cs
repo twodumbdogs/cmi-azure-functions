@@ -1,0 +1,1 @@
+namespace func_glogsb_net_qa_ukwest_001;

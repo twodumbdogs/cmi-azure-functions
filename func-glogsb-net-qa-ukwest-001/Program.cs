@@ -10,9 +10,21 @@ var host = new HostBuilder()
     {
         services.AddSingleton(sp =>
         {
+            var serviceBusConnectionString =
+                Environment.GetEnvironmentVariable("service_bus__connectionString");
+
+            if (!string.IsNullOrWhiteSpace(serviceBusConnectionString))
+            {
+                Console.WriteLine("Using Service Bus SAS connection string authentication.");
+                return new ServiceBusClient(serviceBusConnectionString);
+            }
+
             var fullyQualifiedNamespace =
-                 Environment.GetEnvironmentVariable("service_bus_RBAC__fullyQualifiedNamespace")
-                 ?? throw new InvalidOperationException("Missing env var: service_bus_RBAC__fullyQualifiedNamespace");
+                Environment.GetEnvironmentVariable("service_bus_RBAC__fullyQualifiedNamespace")
+                ?? throw new InvalidOperationException(
+                    "Missing configuration. Set either 'service_bus__connectionString' or 'service_bus_RBAC__fullyQualifiedNamespace'.");
+
+            Console.WriteLine("Using Service Bus RBAC (DefaultAzureCredential) authentication.");
 
             return new ServiceBusClient(
                 fullyQualifiedNamespace,

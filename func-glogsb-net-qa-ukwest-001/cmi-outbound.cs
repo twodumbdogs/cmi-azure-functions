@@ -13,17 +13,20 @@ public class CmiOutboundFunction
 {
     private readonly ILogger<CmiOutboundFunction> _logger;
     private readonly PayloadLookupService _lookupService;
+    private readonly SchemaLookupService _schemaLookupService;
     private readonly JsonMergeService _mergeService;
     private readonly ServiceBusPublisher _publisher;
 
     public CmiOutboundFunction(
         ILogger<CmiOutboundFunction> logger,
         PayloadLookupService lookupService,
+        SchemaLookupService schemaLookupService,
         JsonMergeService mergeService,
         ServiceBusPublisher publisher)
     {
         _logger = logger;
         _lookupService = lookupService;
+        _schemaLookupService = schemaLookupService;
         _mergeService = mergeService;
         _publisher = publisher;
     }
@@ -34,7 +37,7 @@ public class CmiOutboundFunction
         CancellationToken cancellationToken)
     {
         string rawBody;
-        JsonObject? rightJson;
+        JsonObject? leftJson;
 
         try
         {
@@ -56,8 +59,8 @@ public class CmiOutboundFunction
                 return await CreateResponse(req, HttpStatusCode.BadRequest, "Empty request body.");
             }
 
-            rightJson = JsonNode.Parse(rawBody) as JsonObject;
-            if (rightJson is null)
+            leftJson = JsonNode.Parse(rawBody) as JsonObject;
+            if (leftJson is null)
             {
                 _logger.LogWarning("Request body parsed, but root was not a JSON object.");
                 return await CreateResponse(req, HttpStatusCode.BadRequest, "Request body must be a JSON object.");
@@ -71,15 +74,15 @@ public class CmiOutboundFunction
 
         _logger.LogInformation("Inbound payload received and parsed successfully.");
 
-        var topicKey = GetJsonScalarString(rightJson, "topicKey")?.Trim();
-        var inboundObjectId = GetJsonScalarString(rightJson, "objectId");
-        var inboundEntityNumber = GetJsonScalarString(rightJson, "entityNumber");
-        var inboundRequestId = GetJsonScalarString(rightJson, "requestID");
-        var inboundMsgNumber = GetJsonScalarString(rightJson, "msgNumber");
-        var inboundRequestType = GetJsonScalarString(rightJson, "requestType");
-        var inboundEventType = GetJsonScalarString(rightJson, "eventType");
-        var inboundCorrelationId = GetJsonScalarString(rightJson, "correlationId");
-        var inboundMemberFirmCode = GetJsonScalarString(rightJson, "memberFirmCode");
+        var topicKey = GetJsonScalarString(leftJson, "topicKey")?.Trim();
+        var inboundObjectId = GetJsonScalarString(leftJson, "objectId");
+        var inboundEntityNumber = GetJsonScalarString(leftJson, "entityNumber");
+        var inboundRequestId = GetJsonScalarString(leftJson, "requestID");
+        var inboundMsgNumber = GetJsonScalarString(leftJson, "msgNumber");
+        var inboundRequestType = GetJsonScalarString(leftJson, "requestType");
+        var inboundEventType = GetJsonScalarString(leftJson, "eventType");
+        var inboundCorrelationId = GetJsonScalarString(leftJson, "correlationId");
+        var inboundMemberFirmCode = GetJsonScalarString(leftJson, "memberFirmCode");
 
         var objectId = FirstNonBlank(
             inboundObjectId,
@@ -128,8 +131,8 @@ public class CmiOutboundFunction
         }
 
         // ---------------------------------------------------------------------
-        // PRE-MERGE IB CALL
-        // Send the RAW inbound payload to IB before SQL lookup / merge.
+        // PRE-CANONICAL IB CALL
+        // Send the RAW inbound payload to IB before SQL lookup / schema shaping.
         // Fail-open on purpose, matching prior PowerShell behavior.
         // ---------------------------------------------------------------------
         await TrySendToIbAsync(
@@ -141,18 +144,18 @@ public class CmiOutboundFunction
 
         if (topicName is null)
         {
-            return await CreateResponse(req, HttpStatusCode.OK, $"No SB route for '{topicKey}'. Sent to IB pre-merge only (status=error).");
+            return await CreateResponse(req, HttpStatusCode.OK, $"No SB route for '{topicKey}'. Sent to IB pre-canonical only (status=error).");
         }
 
-        JsonObject? leftJson;
+        JsonObject? rightJson;
         try
         {
-            leftJson = await _lookupService.LookupExistingPayloadAsync(objectId);
+            rightJson = await _lookupService.LookupExistingPayloadAsync(objectId, cancellationToken);
 
             _logger.LogInformation(
                 "SQL lookup complete for objectId {ObjectId}. PayloadFound={PayloadFound}",
                 objectId,
-                leftJson is not null);
+                rightJson is not null);
         }
         catch (Exception ex)
         {
@@ -160,59 +163,78 @@ public class CmiOutboundFunction
             return await CreateResponse(req, HttpStatusCode.InternalServerError, $"SQL lookup failed: {ex.Message}");
         }
 
-        JsonObject mergedJson;
-        if (leftJson is null)
+        JsonObject schemaJson;
+        try
         {
-            _logger.LogInformation(
-                "No SQL payload found for objectId {ObjectId}. Using inbound payload as-is.",
-                objectId);
+            schemaJson = await _schemaLookupService.GetSchemaAsync(topicKey, cancellationToken);
 
-            mergedJson = (JsonObject?)rightJson.DeepClone() ?? new JsonObject();
+            _logger.LogInformation(
+                "Schema lookup complete for topicKey {TopicKey}.",
+                topicKey);
         }
-        else
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Schema lookup failed for topicKey {TopicKey}", topicKey);
+            return await CreateResponse(req, HttpStatusCode.InternalServerError, $"Schema lookup failed: {ex.Message}");
+        }
+
+        JsonObject canonicalJson;
+        try
+        {
+            canonicalJson = _mergeService.BuildCanonicalPayload(leftJson, rightJson, schemaJson);
+
             _logger.LogInformation(
-                "SQL payload found for objectId {ObjectId}. Merging left <- right.",
+                "Canonical payload built from schema. topicKey={TopicKey}, objectId={ObjectId}, RightPayloadFound={RightPayloadFound}",
+                topicKey,
+                objectId,
+                rightJson is not null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Canonical payload build failed. topicKey={TopicKey}, objectId={ObjectId}",
+                topicKey,
                 objectId);
 
-            mergedJson = _mergeService.MergeObjects(leftJson, rightJson);
+            return await CreateResponse(req, HttpStatusCode.InternalServerError, $"Canonical payload build failed: {ex.Message}");
         }
 
         var correlationId = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "correlationId"),
+            GetJsonScalarString(canonicalJson, "correlationId"),
             inboundCorrelationId,
             Guid.NewGuid().ToString()
         )!;
 
-        mergedJson["correlationId"] = correlationId;
+        canonicalJson["correlationId"] = correlationId;
 
         var requestId = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "requestID"),
+            GetJsonScalarString(canonicalJson, "requestID"),
             inboundRequestId
         );
 
         var msgNumber = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "msgNumber"),
+            GetJsonScalarString(canonicalJson, "msgNumber"),
             inboundMsgNumber
         );
 
         var requestType = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "requestType"),
+            GetJsonScalarString(canonicalJson, "requestType"),
             inboundRequestType
         );
 
         var entityNumber = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "entityNumber"),
+            GetJsonScalarString(canonicalJson, "entityNumber"),
             inboundEntityNumber
         );
 
         var memberFirmCode = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "memberFirmCode"),
+            GetJsonScalarString(canonicalJson, "memberFirmCode"),
             inboundMemberFirmCode
         );
 
         var eventType = FirstNonBlank(
-            GetJsonScalarString(mergedJson, "eventType"),
+            GetJsonScalarString(canonicalJson, "eventType"),
             inboundEventType
         );
 
@@ -232,19 +254,19 @@ public class CmiOutboundFunction
         AddIfNotBlank(applicationProperties, "eventType", eventType);
         AddIfNotBlank(applicationProperties, "topicKey", topicKey);
 
-        var mergedBody = mergedJson.ToJsonString(new JsonSerializerOptions
+        var canonicalBody = canonicalJson.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = true
         });
 
         _logger.LogInformation(
-            "Merged payload prepared. objectId={ObjectId}, CorrelationId={CorrelationId}, RequestId={RequestId}, MsgNumber={MsgNumber}, Subject={Subject}, MergedBodyLength={MergedBodyLength}, AppPropertyCount={AppPropertyCount}",
+            "Canonical payload prepared. objectId={ObjectId}, CorrelationId={CorrelationId}, RequestId={RequestId}, MsgNumber={MsgNumber}, Subject={Subject}, CanonicalBodyLength={CanonicalBodyLength}, AppPropertyCount={AppPropertyCount}",
             objectId,
             correlationId,
             requestId ?? "(null)",
             msgNumber ?? "(null)",
             subject ?? "(null)",
-            mergedBody.Length,
+            canonicalBody.Length,
             applicationProperties.Count);
 
         if (applicationProperties.Count > 0)
@@ -270,14 +292,14 @@ public class CmiOutboundFunction
 
             await _publisher.PublishAsync(
                 topicName: topicName,
-                jsonPayload: mergedBody,
+                jsonPayload: canonicalBody,
                 correlationId: correlationId,
                 subject: subject,
                 applicationProperties: applicationProperties,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Published merged payload. topic={TopicName}, objectId={ObjectId}, correlationId={CorrelationId}",
+                "Published canonical payload. topic={TopicName}, objectId={ObjectId}, correlationId={CorrelationId}",
                 topicName,
                 objectId,
                 correlationId);
@@ -297,7 +319,7 @@ public class CmiOutboundFunction
         return await CreateResponse(
             req,
             HttpStatusCode.OK,
-            $"Sent raw payload to IB pre-merge and published merged payload to '{topicName}'. objectId={objectId}; correlationId={correlationId}");
+            $"Sent raw payload to IB pre-canonical and published canonical payload to '{topicName}'. objectId={objectId}; correlationId={correlationId}");
     }
 
     private async Task TrySendToIbAsync(
@@ -335,7 +357,7 @@ public class CmiOutboundFunction
             var ibUrl = $"https://{ibHost}/api/v1/rules/{ruleId}/execution?wait_for_completion=-1";
 
             _logger.LogInformation(
-                "Calling IB rule pre-merge. Host={IbHost}, RuleId={RuleId}, RouteStatus={RouteStatus}, RouteTarget={RouteTarget}, RawBodyLength={RawBodyLength}, SkipCertificateCheck={SkipCertificateCheck}",
+                "Calling IB rule pre-canonical. Host={IbHost}, RuleId={RuleId}, RouteStatus={RouteStatus}, RouteTarget={RouteTarget}, RawBodyLength={RawBodyLength}, SkipCertificateCheck={SkipCertificateCheck}",
                 ibHost,
                 ruleId,
                 routeStatus,
@@ -380,14 +402,14 @@ public class CmiOutboundFunction
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation(
-                    "IB rule execution request accepted pre-merge. StatusCode={StatusCode}, ResponseLength={ResponseLength}",
+                    "IB rule execution request accepted pre-canonical. StatusCode={StatusCode}, ResponseLength={ResponseLength}",
                     (int)response.StatusCode,
                     responseBody?.Length ?? 0);
             }
             else
             {
                 _logger.LogWarning(
-                    "IB rule execution returned non-success pre-merge. StatusCode={StatusCode}, ReasonPhrase={ReasonPhrase}, ResponseBody={ResponseBody}",
+                    "IB rule execution returned non-success pre-canonical. StatusCode={StatusCode}, ReasonPhrase={ReasonPhrase}, ResponseBody={ResponseBody}",
                     (int)response.StatusCode,
                     response.ReasonPhrase ?? "(null)",
                     Truncate(responseBody, 4000));
@@ -396,7 +418,7 @@ public class CmiOutboundFunction
         catch (Exception ex)
         {
             // Fail-open on purpose to preserve main HTTP/SB flow even if IB is down.
-            _logger.LogError(ex, "IB rule execution failed pre-merge.");
+            _logger.LogError(ex, "IB rule execution failed pre-canonical.");
         }
     }
 

@@ -2,5 +2,6 @@
     "azureFunctions.deploySubpath": "func-glogsb-net-qa-ukwest-001/bin/Release/net8.0/publish",
     "azureFunctions.projectLanguage": "C#",
     "azureFunctions.projectRuntime": "~4",
-    "azureFunctions.preDeployTask": "publish (functions)"
+    "azureFunctions.preDeployTask": "publish (functions)",
+    "azureFunctions.projectSubpath": "func-gpmsgsb-qa-uksouth-001"
 }

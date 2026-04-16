@@ -33,6 +33,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<JsonMergeService>();
         services.AddSingleton<PayloadLookupService>();
+        services.AddSingleton<SchemaLookupService>();
         services.AddSingleton<ServiceBusPublisher>();
     })
     .Build();

@@ -7,6 +7,13 @@
       "topicName": "%topic__error__emea%",
       "subscriptionName": "%sub__error__emea%",
       "connection": "emea_sb"
+    },
+    {
+      "type": "serviceBus",
+      "direction": "out",
+      "name": "fails",
+      "topicName": "cm-fails",
+      "connection": "service_bus_RBAC"
     }
   ],
   "scriptFile": "run.ps1"

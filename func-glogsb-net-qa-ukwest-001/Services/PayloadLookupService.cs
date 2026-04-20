@@ -5,16 +5,9 @@ namespace func_glogsb_net_qa_ukwest_001;
 
 public class PayloadLookupService
 {
-    public async Task<JsonObject?> LookupExistingPayloadAsync(
-        string objectId,
-        CancellationToken cancellationToken = default)
+    public async Task<JsonObject?> LookupExistingPayloadAsync(string objectId)
     {
-        if (string.IsNullOrWhiteSpace(objectId))
-        {
-            throw new ArgumentException("objectId is required.", nameof(objectId));
-        }
-
-        var connectionString = SqlConnectionHelper.BuildConnectionString();
+        var connectionString = BuildConnectionString();
 
         const string sql = @"
 SELECT TOP (1) jsonPayload
@@ -23,16 +16,12 @@ WHERE objectId = @objectId
 ORDER BY id DESC;";
 
         await using var conn = new SqlConnection(connectionString);
-        await conn.OpenAsync(cancellationToken);
+        await conn.OpenAsync();
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add(new SqlParameter("@objectId", System.Data.SqlDbType.VarChar, 20)
-        {
-            Value = objectId
-        });
+        cmd.Parameters.AddWithValue("@objectId", objectId);
 
-        var result = await cmd.ExecuteScalarAsync(cancellationToken);
-
+        var result = await cmd.ExecuteScalarAsync();
         if (result is null || result == DBNull.Value)
         {
             return null;
@@ -45,5 +34,21 @@ ORDER BY id DESC;";
         }
 
         return JsonNode.Parse(jsonText) as JsonObject;
+    }
+
+    private static string BuildConnectionString()
+    {
+        var fullConnectionString = Environment.GetEnvironmentVariable("Sql__ConnectionString");
+        if (!string.IsNullOrWhiteSpace(fullConnectionString))
+        {
+            return fullConnectionString;
+        }
+
+        var server = Environment.GetEnvironmentVariable("Sql__Server")
+                     ?? throw new InvalidOperationException("Missing env var: Sql__Server");
+        var database = Environment.GetEnvironmentVariable("Sql__Database")
+                       ?? throw new InvalidOperationException("Missing env var: Sql__Database");
+
+        return $"Server={server};Database={database};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;";
     }
 }

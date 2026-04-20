@@ -4,8 +4,8 @@
       "type": "serviceBusTrigger",
       "direction": "in",
       "name": "msg",
-      "topicName": "sbt.pms.cmi.errors.nonprod.dev1",
-      "subscriptionName": "sbs.pms.cmi.errors.intapp.nonprod.dev1",
+      "topicName": "%topic__error__emea%",
+      "subscriptionName": "%sub__error__emea%",
       "connection": "emea_sb"
     }
   ],

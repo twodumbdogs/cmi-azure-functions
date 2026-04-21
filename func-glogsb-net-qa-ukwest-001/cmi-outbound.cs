@@ -62,6 +62,8 @@ public class CmiOutboundFunction
                 _logger.LogWarning("Request body parsed, but root was not a JSON object.");
                 return await CreateResponse(req, HttpStatusCode.BadRequest, "Request body must be a JSON object.");
             }
+
+            rightJson = JsonPayloadNormalizer.NormalizeObject(rightJson);
         }
         catch (Exception ex)
         {

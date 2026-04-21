@@ -4,8 +4,8 @@
       "type": "serviceBusTrigger",
       "direction": "in",
       "name": "msg",
-      "topicName": "%topic__error__emea%",
-      "subscriptionName": "%sub__error__emea%",
+      "topicName": "%topicErrorEMEA%",
+      "subscriptionName": "%subErrorEMEA%",
       "connection": "emea_sb"
     },
     {

@@ -34,7 +34,7 @@ public class CmiOutboundFunction
         CancellationToken cancellationToken)
     {
         string rawBody;
-        JsonObject? rightJson;
+        JsonObject? incomingJson;
 
         try
         {
@@ -56,14 +56,14 @@ public class CmiOutboundFunction
                 return await CreateResponse(req, HttpStatusCode.BadRequest, "Empty request body.");
             }
 
-            rightJson = JsonNode.Parse(rawBody) as JsonObject;
-            if (rightJson is null)
+            incomingJson = JsonNode.Parse(rawBody) as JsonObject;
+            if (incomingJson is null)
             {
                 _logger.LogWarning("Request body parsed, but root was not a JSON object.");
                 return await CreateResponse(req, HttpStatusCode.BadRequest, "Request body must be a JSON object.");
             }
 
-            rightJson = JsonPayloadNormalizer.NormalizeObject(rightJson);
+            incomingJson = JsonPayloadNormalizer.NormalizeObject(incomingJson);
         }
         catch (Exception ex)
         {
@@ -73,15 +73,15 @@ public class CmiOutboundFunction
 
         _logger.LogInformation("Inbound payload received and parsed successfully.");
 
-        var topicKey = GetJsonScalarString(rightJson, "topicKey")?.Trim();
-        var inboundObjectId = GetJsonScalarString(rightJson, "objectId");
-        var inboundEntityNumber = GetJsonScalarString(rightJson, "entityNumber");
-        var inboundRequestId = GetJsonScalarString(rightJson, "requestID");
-        var inboundMsgNumber = GetJsonScalarString(rightJson, "msgNumber");
-        var inboundRequestType = GetJsonScalarString(rightJson, "requestType");
-        var inboundEventType = GetJsonScalarString(rightJson, "eventType");
-        var inboundCorrelationId = GetJsonScalarString(rightJson, "correlationId");
-        var inboundMemberFirmCode = GetJsonScalarString(rightJson, "memberFirmCode");
+        var topicKey = GetJsonScalarString(incomingJson, "topicKey")?.Trim();
+        var inboundObjectId = GetJsonScalarString(incomingJson, "objectId");
+        var inboundEntityNumber = GetJsonScalarString(incomingJson, "entityNumber");
+        var inboundRequestId = GetJsonScalarString(incomingJson, "requestID");
+        var inboundMsgNumber = GetJsonScalarString(incomingJson, "msgNumber");
+        var inboundRequestType = GetJsonScalarString(incomingJson, "requestType");
+        var inboundEventType = GetJsonScalarString(incomingJson, "eventType");
+        var inboundCorrelationId = GetJsonScalarString(incomingJson, "correlationId");
+        var inboundMemberFirmCode = GetJsonScalarString(incomingJson, "memberFirmCode");
 
         var objectId = FirstNonBlank(
             inboundObjectId,
@@ -146,15 +146,15 @@ public class CmiOutboundFunction
             return await CreateResponse(req, HttpStatusCode.OK, $"No SB route for '{topicKey}'. Sent to IB pre-merge only (status=error).");
         }
 
-        JsonObject? leftJson;
+        JsonObject? sqlPayloadJson;
         try
         {
-            leftJson = await _lookupService.LookupExistingPayloadAsync(objectId);
+            sqlPayloadJson = await _lookupService.LookupExistingPayloadAsync(objectId);
 
             _logger.LogInformation(
                 "SQL lookup complete for objectId {ObjectId}. PayloadFound={PayloadFound}",
                 objectId,
-                leftJson is not null);
+                sqlPayloadJson is not null);
         }
         catch (Exception ex)
         {
@@ -163,21 +163,21 @@ public class CmiOutboundFunction
         }
 
         JsonObject mergedJson;
-        if (leftJson is null)
+        if (sqlPayloadJson is null)
         {
             _logger.LogInformation(
                 "No SQL payload found for objectId {ObjectId}. Using inbound payload as-is.",
                 objectId);
 
-            mergedJson = (JsonObject?)rightJson.DeepClone() ?? new JsonObject();
+            mergedJson = (JsonObject?)incomingJson.DeepClone() ?? new JsonObject();
         }
         else
         {
             _logger.LogInformation(
-                "SQL payload found for objectId {ObjectId}. Merging left <- right.",
+                "SQL payload found for objectId {ObjectId}. Merging inbound payload over SQL template.",
                 objectId);
 
-            mergedJson = _mergeService.MergeObjects(leftJson, rightJson);
+            mergedJson = _mergeService.MergeObjects(incomingJson, sqlPayloadJson);
         }
 
         var correlationId = FirstNonBlank(

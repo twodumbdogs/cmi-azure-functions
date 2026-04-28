@@ -5,6 +5,41 @@ namespace func_glogsb_net_qa_ukwest_001;
 
 public class PayloadLookupService
 {
+    public async Task<JsonObject?> LookupSchemaTemplateAsync(string topicKey)
+    {
+        var columnName = ResolveSchemaColumnName(topicKey);
+        if (columnName is null)
+        {
+            return null;
+        }
+
+        var connectionString = BuildConnectionString();
+        var sql = $@"
+SELECT TOP (1) [{columnName}]
+FROM dbo._NRF_sbSchemas
+WHERE [{columnName}] IS NOT NULL
+ORDER BY UpdatedUtc DESC, Id DESC;";
+
+        await using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(sql, conn);
+
+        var result = await cmd.ExecuteScalarAsync();
+        if (result is null || result == DBNull.Value)
+        {
+            return null;
+        }
+
+        var jsonText = Convert.ToString(result);
+        if (string.IsNullOrWhiteSpace(jsonText))
+        {
+            return null;
+        }
+
+        return JsonNode.Parse(jsonText) as JsonObject;
+    }
+
     public async Task<JsonObject?> LookupExistingPayloadAsync(string objectId)
     {
         var connectionString = BuildConnectionString();
@@ -35,6 +70,15 @@ ORDER BY id DESC;";
 
         return JsonNode.Parse(jsonText) as JsonObject;
     }
+
+    private static string? ResolveSchemaColumnName(string topicKey) =>
+        topicKey.Trim().ToLowerInvariant() switch
+        {
+            "client" => "client",
+            "matter" => "matter",
+            "payor" => "payor",
+            _ => null
+        };
 
     private static string BuildConnectionString()
     {

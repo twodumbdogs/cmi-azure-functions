@@ -146,39 +146,40 @@ public class CmiOutboundFunction
             return await CreateResponse(req, HttpStatusCode.OK, $"No SB route for '{topicKey}'. Sent to IB pre-merge only (status=error).");
         }
 
-        JsonObject? sqlPayloadJson;
+        JsonObject? schemaTemplateJson;
+        JsonObject? existingPayloadJson;
         try
         {
-            sqlPayloadJson = await _lookupService.LookupExistingPayloadAsync(objectId);
+            schemaTemplateJson = await _lookupService.LookupSchemaTemplateAsync(topicKey);
+            existingPayloadJson = await _lookupService.LookupExistingPayloadAsync(objectId);
 
             _logger.LogInformation(
-                "SQL lookup complete for objectId {ObjectId}. PayloadFound={PayloadFound}",
+                "SQL lookup complete for topicKey {TopicKey}, objectId {ObjectId}. SchemaTemplateFound={SchemaTemplateFound}, PayloadFound={PayloadFound}",
+                topicKey,
                 objectId,
-                sqlPayloadJson is not null);
+                schemaTemplateJson is not null,
+                existingPayloadJson is not null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SQL lookup failed for objectId {ObjectId}", objectId);
+            _logger.LogError(ex, "SQL lookup failed for topicKey {TopicKey}, objectId {ObjectId}", topicKey, objectId);
             return await CreateResponse(req, HttpStatusCode.InternalServerError, $"SQL lookup failed: {ex.Message}");
         }
 
-        JsonObject mergedJson;
-        if (sqlPayloadJson is null)
-        {
-            _logger.LogInformation(
-                "No SQL payload found for objectId {ObjectId}. Using inbound payload as-is.",
-                objectId);
+        var templateWithExistingPayload = schemaTemplateJson is null
+            ? existingPayloadJson
+            : existingPayloadJson is null
+                ? schemaTemplateJson
+                : _mergeService.MergeObjects(existingPayloadJson, schemaTemplateJson);
 
-            mergedJson = (JsonObject?)incomingJson.DeepClone() ?? new JsonObject();
-        }
-        else
-        {
-            _logger.LogInformation(
-                "SQL payload found for objectId {ObjectId}. Merging inbound payload over SQL template.",
-                objectId);
+        var mergedJson = templateWithExistingPayload is null
+            ? (JsonObject?)incomingJson.DeepClone() ?? new JsonObject()
+            : _mergeService.MergeObjects(incomingJson, templateWithExistingPayload);
 
-            mergedJson = _mergeService.MergeObjects(incomingJson, sqlPayloadJson);
-        }
+        _logger.LogInformation(
+            "Three-source merge prepared. Incoming payload wins, existing SQL payload fills next, schema template fills final shape. SchemaTemplateFound={SchemaTemplateFound}, PayloadFound={PayloadFound}",
+            schemaTemplateJson is not null,
+            existingPayloadJson is not null);
 
         var correlationId = FirstNonBlank(
             GetJsonScalarString(mergedJson, "correlationId"),

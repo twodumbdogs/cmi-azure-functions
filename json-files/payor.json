@@ -1,0 +1,33 @@
+{
+  "topicKey": "",
+  "requestID": "",
+  "date": null,
+  "entityNumber": "",
+  "memberFirmCode": "",
+  "extendedRegions": [],
+  "msgNumber": "",
+  "correlationId": "",
+  "requestType": "",
+  "partyId": "",
+  "name": "",
+  "entityType": "",
+  "payorType": "",
+  "payorTaxNumber": "",
+  "payorVATnumber": "",
+  "addresses": [
+    {
+      "addressType": "",
+      "street1": "",
+      "street2": "",
+      "street3": "",
+      "city": "",
+      "state": "",
+      "zip": "",
+      "country": "",
+      "title": "",
+      "email": "",
+      "phone": "",
+      "fax": ""
+    }
+  ]
+}

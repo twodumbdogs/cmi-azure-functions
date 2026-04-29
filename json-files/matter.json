@@ -1,0 +1,131 @@
+{
+  "topicKey": "",
+  "requestID": "",
+  "date": null,
+  "entityNumber": "",
+  "matterNumber": "",
+  "memberFirmCode": "",
+  "extendedRegions": [],
+  "msgNumber": "",
+  "correlationId": "",
+  "requestType": "",
+  "partyRelationships": [
+    {
+      "entity": "",
+      "entityType": "",
+      "relationship": "",
+      "payorType": "",
+      "activePayor": null,
+      "comment": ""
+    }
+  ],
+  "billable": null,
+  "name": "",
+  "bidMatter": null,
+  "bidStatus": "",
+  "createdOn": null,
+  "openedOn": null,
+  "closedOn": null,
+  "status": "",
+  "primaryJurisdiction": "",
+  "additionalCountriesJurisdiction": [],
+  "office": "",
+  "billingOffices": [
+    {
+      "office": "",
+      "region": ""
+    }
+  ],
+  "matterUsers": [
+    {
+      "regionCode": "",
+      "userType": "",
+      "timekeeperId": "",
+      "office": "",
+      "department": "",
+      "allocation": "",
+      "associateTimekeeperId": "",
+      "startDate": null,
+      "endDate": null
+    }
+  ],
+  "confidentialMatter": null,
+  "confidentialityType": "",
+  "ethicalWall": null,
+  "matterBankingSanctionsExposure": "",
+  "usPersonsProhibed": null,
+  "officesInvolved": [
+    {
+      "office": "",
+      "region": ""
+    }
+  ],
+  "marketingUS": null,
+  "ascendant": null,
+  "matterCategory": "",
+  "matterServiceArea": "",
+  "matterType": "",
+  "matterTechnicalArea": "",
+  "matterNatureOfWork": "",
+  "matterNatureOfProceeding": "",
+  "matterRiskAssessmentAML": null,
+  "smaApproval": null,
+  "transformMatter": null,
+  "keyInitiatives": [],
+  "ipInprotechReferenceNumber": "",
+  "ipApplicationDate": null,
+  "ipApplicationNumber": "",
+  "ipRegistrationDate": null,
+  "ipRegistrationNumber": "",
+  "ipIPJurisdiction": "",
+  "feeEstimate": null,
+  "disbEstimate": 0,
+  "panelTerms": null,
+  "passThrough": null,
+  "passThroughIndustry": "",
+  "passThroughSubIndustry": null,
+  "passThroughBeneficiary": null,
+  "nonStandardTerms": null,
+  "feeRates": null,
+  "feeRatesDetails": null,
+  "disbRates": null,
+  "disbRatesDetails": null,
+  "specialTaxRequired": null,
+  "timeEntryUnits": "",
+  "billingMethod": null,
+  "billingFrequency": "",
+  "pONumber": "",
+  "billingCurrency": "",
+  "billingLanguage": "",
+  "billFormatRequirements": null,
+  "billingFormat": null,
+  "billingInstructions": "",
+  "billingPaymentBehavior": "",
+  "matterSpecificActivity": null,
+  "matterSpecificExpense": null,
+  "matterSpecificPhase": null,
+  "ebillingVendor": null,
+  "eBillingMatter": null,
+  "eBillingCaseNumber": "",
+  "eBillingCaseName": "",
+  "addresses": [
+    {
+      "addressType": "",
+      "street1": "",
+      "street2": "",
+      "street3": "",
+      "city": "",
+      "state": "",
+      "zip": "",
+      "country": ""
+    }
+  ],
+  "contact": {
+    "contactName": "",
+    "title": "",
+    "email": "",
+    "phone": "",
+    "fax": ""
+  },
+  "courtNumber": ""
+}

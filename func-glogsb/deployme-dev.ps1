@@ -18,8 +18,8 @@
 #>
 
 param(
-  [string]$ResourceGroup = "rg-gpmsgsb-dev-uksouth-001",
-  [string]$FunctionApp   = "func-gpmsgsb-dev-uksouth-001",
+  [string]$ResourceGroup = "rg-glogsb-dev-uksouth-001",
+  [string]$FunctionApp   = "func-glogsb-dev-uksouth-001",
   [string]$ProjectPath   = (Get-Location).Path
 )
 

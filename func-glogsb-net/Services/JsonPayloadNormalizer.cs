@@ -4,6 +4,8 @@ namespace func_glogsb_net;
 
 public static class JsonPayloadNormalizer
 {
+    private const string MatterBankingSanctionsExposureField = "matterBankingSanctionsExposure";
+
     public static JsonObject NormalizeObject(JsonObject input)
     {
         var output = new JsonObject();
@@ -11,7 +13,7 @@ public static class JsonPayloadNormalizer
         foreach (var kvp in input)
         {
             var normalizedName = NormalizePropertyName(kvp.Key);
-            var normalizedValue = NormalizeNode(kvp.Value);
+            var normalizedValue = NormalizeNode(kvp.Value, normalizedName);
 
             if (output.ContainsKey(normalizedName))
             {
@@ -25,8 +27,13 @@ public static class JsonPayloadNormalizer
         return output;
     }
 
-    private static JsonNode? NormalizeNode(JsonNode? node)
+    private static JsonNode? NormalizeNode(JsonNode? node, string? propertyName = null)
     {
+        if (IsMatterBankingSanctionsExposureField(propertyName))
+        {
+            return NormalizeMatterBankingSanctionsExposure(node);
+        }
+
         if (node is null)
         {
             return null;
@@ -66,6 +73,40 @@ public static class JsonPayloadNormalizer
 
         return node.DeepClone();
     }
+
+    private static JsonNode? NormalizeMatterBankingSanctionsExposure(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<bool>(out var b))
+            {
+                return JsonValue.Create(b);
+            }
+
+            if (value.TryGetValue<string>(out var s))
+            {
+                return s.Trim().ToLowerInvariant() switch
+                {
+                    "yes" or "y" or "true" => JsonValue.Create(true),
+                    "no" or "n" or "false" => JsonValue.Create(false),
+                    _ => null
+                };
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsMatterBankingSanctionsExposureField(string? propertyName) =>
+        string.Equals(
+            propertyName?.TrimStart('_'),
+            MatterBankingSanctionsExposureField,
+            StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePropertyName(string name)
     {

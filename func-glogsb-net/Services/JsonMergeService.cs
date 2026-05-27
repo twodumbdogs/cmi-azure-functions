@@ -4,6 +4,9 @@ namespace func_glogsb_net;
 
 public class JsonMergeService
 {
+    private const string MatterUsersArrayField = "matterUsers";
+    private const string MatterUserArrayField = "matterUser";
+
     public JsonObject MergeIntoTemplate(JsonObject template, params JsonObject?[] sourcesByPriority)
     {
         var result = new JsonObject();
@@ -16,7 +19,7 @@ public class JsonMergeService
                 .Select(source => GetPropertyValue(source, propName))
                 .ToArray();
 
-            result[propName] = MergeTemplateValue(templateValue, sourceValues);
+            result[propName] = MergeTemplateValue(propName, templateValue, sourceValues);
         }
 
         return result;
@@ -45,6 +48,11 @@ public class JsonMergeService
                 continue;
             }
 
+            if (IsMatterUsersArray(propName) && leftValue is JsonArray)
+            {
+                continue;
+            }
+
             if (leftValue is JsonArray && rightValue is JsonArray rightArr)
             {
                 // Rule: fill empty left arrays from right, but keep left when populated.
@@ -68,7 +76,7 @@ public class JsonMergeService
         return result;
     }
 
-    private static JsonNode? MergeTemplateValue(JsonNode? templateValue, JsonNode?[] sourceValues)
+    private static JsonNode? MergeTemplateValue(string propertyName, JsonNode? templateValue, JsonNode?[] sourceValues)
     {
         if (templateValue is JsonObject templateObject)
         {
@@ -84,7 +92,7 @@ public class JsonMergeService
 
         if (templateValue is JsonArray templateArray)
         {
-            return MergeTemplateArray(templateArray, sourceValues);
+            return MergeTemplateArray(propertyName, templateArray, sourceValues);
         }
 
         foreach (var sourceValue in sourceValues)
@@ -98,8 +106,13 @@ public class JsonMergeService
         return templateValue?.DeepClone();
     }
 
-    private static JsonNode? MergeTemplateArray(JsonArray templateArray, JsonNode?[] sourceValues)
+    private static JsonNode? MergeTemplateArray(string propertyName, JsonArray templateArray, JsonNode?[] sourceValues)
     {
+        if (IsMatterUsersArray(propertyName) && sourceValues.FirstOrDefault() is JsonArray incomingArray)
+        {
+            return DeduplicateArray(ShapeArrayFromSingleSource(templateArray, incomingArray));
+        }
+
         var sourceArrays = sourceValues
             .OfType<JsonArray>()
             .Where(array => array.Count > 0)
@@ -107,12 +120,12 @@ public class JsonMergeService
 
         if (sourceArrays.Length == 0)
         {
-            return templateArray.DeepClone();
+            return DeduplicateArray((JsonArray)templateArray.DeepClone());
         }
 
         if (templateArray.FirstOrDefault() is not JsonObject itemTemplate)
         {
-            return sourceArrays[0].DeepClone();
+            return DeduplicateArray((JsonArray)sourceArrays[0].DeepClone());
         }
 
         var maxItemCount = sourceArrays.Max(array => array.Count);
@@ -136,6 +149,50 @@ public class JsonMergeService
 
             result.Add(sourceItems.FirstOrDefault(item => !IsBlankScalar(item))?.DeepClone()
                        ?? templateArray[0]?.DeepClone());
+        }
+
+        return DeduplicateArray(result);
+    }
+
+    private static JsonArray ShapeArrayFromSingleSource(JsonArray templateArray, JsonArray sourceArray)
+    {
+        if (sourceArray.Count == 0)
+        {
+            return new JsonArray();
+        }
+
+        if (templateArray.FirstOrDefault() is not JsonObject itemTemplate)
+        {
+            return (JsonArray)sourceArray.DeepClone();
+        }
+
+        var result = new JsonArray();
+        foreach (var sourceItem in sourceArray)
+        {
+            if (sourceItem is JsonObject sourceObject)
+            {
+                result.Add(new JsonMergeService().MergeIntoTemplate(itemTemplate, sourceObject));
+                continue;
+            }
+
+            result.Add(sourceItem?.DeepClone() ?? itemTemplate.DeepClone());
+        }
+
+        return result;
+    }
+
+    private static JsonArray DeduplicateArray(JsonArray sourceArray)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new JsonArray();
+
+        foreach (var item in sourceArray)
+        {
+            var key = item?.ToJsonString() ?? "null";
+            if (seen.Add(key))
+            {
+                result.Add(item?.DeepClone());
+            }
         }
 
         return result;
@@ -169,5 +226,13 @@ public class JsonMergeService
         }
 
         return false;
+    }
+
+    private static bool IsMatterUsersArray(string propertyName)
+    {
+        var normalizedPropertyName = propertyName.TrimStart('_');
+
+        return string.Equals(normalizedPropertyName, MatterUsersArrayField, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(normalizedPropertyName, MatterUserArrayField, StringComparison.OrdinalIgnoreCase);
     }
 }

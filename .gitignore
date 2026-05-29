@@ -1,0 +1,6 @@
+.dotnet-home/
+bin/
+obj/
+local.settings.json
+*.lscache
+us-settings.txt

@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "func_glogsb_net": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7221",
+      "launchBrowser": false
+    }
+  }
+}

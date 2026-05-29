@@ -4,8 +4,8 @@
       "type": "serviceBusTrigger",
       "direction": "in",
       "name": "msg",
-      "topicName": "compliance.payors.v1",
-      "subscriptionName": "compliance.payors.v1.sub-global-response",
+      "topicName": "%topicPayorUS%",
+      "subscriptionName": "%subPayorUS%",
       "connection": "us_sb"
     }
   ],

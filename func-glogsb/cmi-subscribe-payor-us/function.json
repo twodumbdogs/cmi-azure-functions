@@ -4,11 +4,10 @@
       "type": "serviceBusTrigger",
       "direction": "in",
       "name": "msg",
-      "topicName": "compliance.clients.v1",
-      "subscriptionName": "compliance.clients.v1.sub-global-response",
+      "topicName": "%topicPayorUS%",
+      "subscriptionName": "%subPayorUS%",
       "connection": "us_sb"
     }
   ],
   "scriptFile": "run.ps1"
 }
- 

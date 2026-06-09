@@ -1,0 +1,87 @@
+{
+  "topicKey": "",
+  "requestID": "",
+  "date": null,
+  "entityNumber": "",
+  "memberFirmCode": "",
+  "extendedRegions": [],
+  "msgNumber": "",
+  "correlationId": "",
+  "requestType": "",
+  "name": "",
+  "status": "",
+  "openedOn": null,
+  "createdOn": null,
+  "closedOn": null,
+  "dunsNumber": "",
+  "globalUltimateDunsNumber": "",
+  "globalUltimateOwnerName": "",
+  "office": "",
+  "billingOffices": [
+    {
+      "office": "",
+      "region": ""
+    }
+  ],
+  "clientType": "",
+  "confidentialClient": null,
+  "clientHaveTermsPreventGSC": null,
+  "companyRegistrationNumber": "",
+  "bidClientOnly": null,
+  "panelClient": null,
+  "panelName": "",
+  "smaApproval": null,
+  "clientMarkedOutsideStrategy": null,
+  "reasonClientOutsideStrategy": "",
+  "detailsOfNonStandardTerms": "",
+  "clientUsers": [
+    {
+      "regionCode": "",
+      "userType": "",
+      "timekeeperId": "",
+      "allocation": "",
+      "startDate": null,
+      "endDate": null
+    }
+  ],
+  "addresses": [
+    {
+      "addressType": "",
+      "street1": "",
+      "street2": "",
+      "street3": "",
+      "city": "",
+      "state": "",
+      "zip": "",
+      "country": ""
+    }
+  ],
+  "contact": {
+    "contactName": "",
+    "title": "",
+    "email": "",
+    "fax": "",
+    "phone": ""
+  },
+  "clientHeadlight": "",
+  "clientIndustryByHeadlight": "",
+  "sicCode": "",
+  "informationalBarrier": "",
+  "highRisk": null,
+  "clientSanctionsExposure": null,
+  "lastAmlCheckDate": null,
+  "eBillingClient": null,
+  "eBillingVendorId": "",
+  "purchaseOrderNumber": null,
+  "billingContactVatNumber": "",
+  "taxRegistrationNumber": "",
+  "ascendant": null,
+  "countryOfIncorporation": "",
+  "clientImposedTerms": "",
+  "category": [],
+  "govEntity": "",
+  "ipClientCode": "",
+  "ipClientCategory": "",
+  "ipRegions": [],
+  "ipCreatedOn": null
+}

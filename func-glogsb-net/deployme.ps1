@@ -6,6 +6,8 @@
   Publishes the project to a local output folder, zips the published files,
   and deploys them to the target Function App using Azure CLI ZIP deploy.
 
+  Pass the target Function App and resource group when running.
+
 .PARAMETER ResourceGroup
   Resource group containing the Function App.
 
@@ -20,14 +22,28 @@
 #>
 
 param(
-  [string]$ResourceGroup = "rg-glogsb-qa-ukwest-001",
-  [string]$FunctionApp   = "func-glogsb-net-qa-ukwest-001",
-  [string]$ProjectPath   = (Get-Location).Path,
+  [string]$ResourceGroup,
+  [string]$FunctionApp,
+  [string]$ProjectPath   = $PSScriptRoot,
   [ValidateSet("Debug","Release")]
   [string]$Configuration = "Release"
 )
 
 $ErrorActionPreference = "Stop"
+
+function Assert-RequiredValue {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "Please provide the ResourceGroup and FunctionApp command line options. Example: .\deployme.ps1 -ResourceGroup ""rg-name"" -FunctionApp ""func-name"""
+    }
+}
+
+Assert-RequiredValue -Name 'ResourceGroup' -Value $ResourceGroup
+Assert-RequiredValue -Name 'FunctionApp' -Value $FunctionApp
 
 # Check Azure CLI login
 Write-Host "Checking Azure CLI login status..." -ForegroundColor Cyan

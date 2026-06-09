@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "type": "serviceBusTrigger",
+      "direction": "in",
+      "name": "msg",
+      "topicName": "%topicMatterCAN%",
+      "subscriptionName": "%subMatterCAN%",
+      "connection": "can_sb"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}

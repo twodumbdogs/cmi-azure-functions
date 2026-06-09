@@ -170,6 +170,10 @@ try {
 }
 catch {
     LogErr "IB configuration error: $($_.Exception.Message)"
+    Send-ErrorEmail `
+        -Subject "Azure Function configuration error" `
+        -Body "IB configuration error:`n`n$($_ | Out-String)" `
+        -Context @{ Function = (Get-FunctionName -TriggerMetadata $TriggerMetadata); Subscriber = $script:SubscriberId }
     throw
 }
 
@@ -233,6 +237,11 @@ try {
 catch {
     LogErr "Unhandled error: $($_.Exception.Message)"
     LogErr ($_ | Out-String)
+
+    Send-ErrorEmail `
+        -Subject "Azure Function unhandled error" `
+        -Body "Unhandled subscriber error:`n`n$($_ | Out-String)" `
+        -Context @{ Function = $functionName; Subscriber = $script:SubscriberId }
 
     try {
         Push-OutputBinding -Name fails -Value $msg

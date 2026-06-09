@@ -67,10 +67,10 @@ if ($LASTEXITCODE -eq 0) {
   Write-Host "❌ Deployment failed." -ForegroundColor Red
 }
 $mk = az functionapp keys list `
-   --name func-gpmsgsb-dev-uksouth-001 `
-   --resource-group rg-gpmsgsb-dev-uksouth-001 `
+   --name $FunctionApp `
+   --resource-group $ResourceGroup `
    --query masterKey -o tsv
 
-irm -Method POST "https://func-glogsb-qa-ukwest-001.azurewebsites.net/admin/host/synctriggers?code=$mk"
+irm -Method POST "https://$FunctionApp.azurewebsites.net/admin/host/synctriggers?code=$mk"
 
 Write-Host "✅ Triggers synchronized!" -ForegroundColor Green

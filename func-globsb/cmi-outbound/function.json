@@ -1,0 +1,37 @@
+{
+  "bindings": [
+    {
+      "authLevel": "FUNCTION",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "Request",
+      "methods": [ "get", "post" ]
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "Response"
+    },
+    {
+      "name": "matter",
+      "direction": "out",
+      "type": "serviceBus",
+      "connection": "service_bus_RBAC",
+      "topicName": "cmi-matter"
+    },
+    {
+      "name": "client",
+      "direction": "out",
+      "type": "serviceBus",
+      "connection": "service_bus_RBAC",
+      "topicName": "cmi-client"
+    },
+    {
+      "name": "payor",
+      "direction": "out",
+      "type": "serviceBus",
+      "connection": "service_bus_RBAC",
+      "topicName": "cmi-payor"
+    }
+  ]
+}

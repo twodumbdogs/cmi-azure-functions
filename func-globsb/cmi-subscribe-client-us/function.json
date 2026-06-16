@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "type": "serviceBusTrigger",
+      "direction": "in",
+      "name": "msg",
+      "topicName": "%topicClientUS%",
+      "subscriptionName": "%subClientUS%",
+      "connection": "us_sb"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}

@@ -1,0 +1,6 @@
+.dotnet-home/
+*.lscache
+
+bin/
+obj/
+

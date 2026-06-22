@@ -228,6 +228,7 @@ try {
         -ContentType "application/json" `
         -Body $ibRequest
 
+    Start-Sleep -Seconds ([int]($env:intapp__ibThrottleSeconds ?? 1))
     LogCtx "Rule execution triggered successfully."
 }
 catch {

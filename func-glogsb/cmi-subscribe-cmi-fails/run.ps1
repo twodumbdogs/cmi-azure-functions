@@ -234,6 +234,7 @@ try {
 
     try {
         $resp = Invoke-RestMethodInsecure -Method 'POST' -Uri $IbUrl -Headers $headers -ContentType 'application/json' -Body $ibRequest
+        Start-Sleep -Seconds ([int]($env:intapp__ibThrottleSeconds ?? 1))
 
         $respText = $null
         try { $respText = ($resp | Out-String).Trim() } catch { $respText = "[unprintable response]" }

@@ -270,6 +270,7 @@ try {
 
     LogInfo "Calling Integration Builder rule: $IbUrl"
     $resp = Invoke-RestMethodInsecure -Method 'POST' -Uri $IbUrl -Headers $headers -ContentType 'application/json' -Body $ibRequest
+    Start-Sleep -Seconds ([int]($env:intapp__ibThrottleSeconds ?? 1))
 }
 catch {
     # fail-open: don't fail the HTTP call if IB fails

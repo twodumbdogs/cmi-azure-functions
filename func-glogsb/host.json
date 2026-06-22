@@ -7,6 +7,13 @@
       "Azure.Messaging.ServiceBus": "Information"
     }
   },
+  "extensions": {
+    "serviceBus": {
+      "prefetchCount": 0,
+      "maxConcurrentCalls": 1,
+      "maxAutoLockRenewalDuration": "00:10:00"
+    }
+  },
   "extensionBundle": {
     "id": "Microsoft.Azure.Functions.ExtensionBundle",
     "version": "[4.0.0, 5.0.0)"

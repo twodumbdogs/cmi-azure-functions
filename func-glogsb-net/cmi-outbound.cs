@@ -14,17 +14,20 @@ public class CmiOutboundFunction
     private readonly ILogger<CmiOutboundFunction> _logger;
     private readonly PayloadLookupService _lookupService;
     private readonly JsonMergeService _mergeService;
+    private readonly PayloadSchemaValidationService _schemaValidationService;
     private readonly ServiceBusPublisher _publisher;
 
     public CmiOutboundFunction(
         ILogger<CmiOutboundFunction> logger,
         PayloadLookupService lookupService,
         JsonMergeService mergeService,
+        PayloadSchemaValidationService schemaValidationService,
         ServiceBusPublisher publisher)
     {
         _logger = logger;
         _lookupService = lookupService;
         _mergeService = mergeService;
+        _schemaValidationService = schemaValidationService;
         _publisher = publisher;
     }
 
@@ -241,6 +244,32 @@ public class CmiOutboundFunction
         {
             WriteIndented = true
         });
+
+        var schemaValidation = _schemaValidationService.Validate(topicKey, mergedBody);
+        if (!schemaValidation.IsValid)
+        {
+            _logger.LogWarning(
+                "Merged payload failed JSON schema validation. topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, Error={SchemaValidationError}",
+                topicKey,
+                objectId,
+                correlationId,
+                schemaValidation.ErrorMessage ?? "(null)");
+
+            var statusCode = schemaValidation.Status == PayloadSchemaValidationStatus.ConfigurationError
+                ? HttpStatusCode.InternalServerError
+                : HttpStatusCode.BadRequest;
+
+            return await CreateResponse(
+                req,
+                statusCode,
+                $"Merged payload failed JSON schema validation: {schemaValidation.ErrorMessage}");
+        }
+
+        _logger.LogInformation(
+            "Merged payload passed JSON schema validation. topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}",
+            topicKey,
+            objectId,
+            correlationId);
 
         // ---------------------------------------------------------------------
         // POST-MERGE IB CALL

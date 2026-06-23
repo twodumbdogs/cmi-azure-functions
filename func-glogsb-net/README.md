@@ -36,9 +36,10 @@ For each request, the function:
 8. Looks up a schema template and existing payload from SQL.
 9. Merges the incoming payload, existing SQL payload, and schema template.
 10. Ensures a `correlationId` exists.
-11. Sends the final merged JSON payload to Integration Builder.
-12. Publishes the final merged JSON payload to Service Bus.
-13. Returns a plain text status response.
+11. Validates the final merged JSON payload against the configured JSON Schema for the topic.
+12. Sends the final merged JSON payload to Integration Builder.
+13. Publishes the final merged JSON payload to Service Bus.
+14. Returns a plain text status response.
 
 ## Routing
 
@@ -112,6 +113,22 @@ Integration Builder is called with the final merged payload in the `jsonBody` in
 
 The IB call is intentionally fail-open. If IB is unavailable or returns an error, the function logs the failure but continues to publish the merged payload to Service Bus.
 
+## JSON Schema validation
+
+The final merged payload is validated after merge/correlation handling and before Integration Builder or Service Bus.
+
+Schema file names:
+
+- `Schemas/CmiClientSchema.json`
+- `Schemas/CmiMatterSchema.json`
+- `Schemas/CmiPayorSchema.json`
+
+Set `SchemaValidation__Directory` to override the schema folder at runtime.
+
+If the matching schema file is missing or cannot be loaded, the function returns HTTP 500 and does not call Integration Builder or publish to Service Bus.
+
+If the merged payload does not match the configured schema, the function returns HTTP 400 and does not call Integration Builder or publish to Service Bus.
+
 ## Merge behavior
 
 The merge is designed so the incoming request has priority, the existing SQL payload fills gaps, and the schema template defines the final shape when one exists.
@@ -132,6 +149,8 @@ See `Services/README.md` for more detail on the helper services.
 - Invalid or empty JSON returns HTTP 400.
 - Missing routing or lookup identifiers returns HTTP 400.
 - SQL lookup errors return HTTP 500.
+- Missing or invalid JSON Schema files return HTTP 500 before publish.
+- Schema validation failures return HTTP 400 before publish.
 - Service Bus publish errors return HTTP 500.
 - Integration Builder errors are logged but do not fail the request.
 

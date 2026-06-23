@@ -70,6 +70,19 @@ Merge rules:
 - Arrays are deduplicated by exact JSON representation.
 - `matterUsers` and `matterUser` arrays are specially shaped and deduplicated.
 
+## PayloadSchemaValidationService
+
+`PayloadSchemaValidationService` validates the final merged outbound payload against a topic-specific JSON Schema.
+
+Validation rules:
+
+- `client` and `cmi-client` use `CmiClientSchema.json`.
+- `matter` and `cmi-matter` use `CmiMatterSchema.json`.
+- `payor` and `cmi-payor` use `CmiPayorSchema.json`.
+- Schemas load from `Schemas` under the Function App base directory unless `SchemaValidation__Directory` is set.
+- Missing or invalid schema files are configuration errors.
+- Payload mismatches are request validation errors.
+
 ## JsonPayloadNormalizer
 
 `JsonPayloadNormalizer` normalizes incoming and SQL-loaded JSON before merging.

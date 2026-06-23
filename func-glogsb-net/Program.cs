@@ -32,6 +32,7 @@ var host = new HostBuilder()
         });
 
         services.AddSingleton<JsonMergeService>();
+        services.AddSingleton<PayloadSchemaValidationService>();
         services.AddSingleton<PayloadLookupService>();
         services.AddSingleton<ServiceBusPublisher>();
     })

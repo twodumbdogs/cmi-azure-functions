@@ -1,10 +1,11 @@
 # func-glogsb PowerShell Functions
 
-This folder contains the PowerShell Azure Function App for the CMI Service Bus and Integration Builder flow.
+This folder contains the PowerShell Azure Function App for the CMI Service Bus subscriber flow.
+
+Outbound HTTP payload intake is handled by the .NET Function App in `../func-glogsb-net`. The old PowerShell `cmi-outbound` HTTP function was removed so the outbound payload is not sent to Integration Builder twice.
 
 ## Functions
 
-- `cmi-outbound`: HTTP entry point that accepts JSON, routes known payloads to Service Bus topics, and notifies Integration Builder.
 - `cmi-subscribe-client-us`: Service Bus subscriber for US client messages.
 - `cmi-subscribe-matter-us`: Service Bus subscriber for US matter messages.
 - `cmi-subscribe-payor-us`: Service Bus subscriber for US payor messages.
@@ -20,8 +21,6 @@ Most functions that call Integration Builder use these app settings:
 - `intapp__ibIp`: Optional IP used for TCP preflight checks.
 - `intapp__ibToken`: Integration Builder authentication token.
 - `intapp__ibThrottleSeconds`: Optional post-send delay. Defaults to 1 second when missing.
-
-The outbound HTTP function uses `intapp__ibRuleId`.
 
 The regional subscriber functions use `intapp__rule_id_regional_subscribe`.
 

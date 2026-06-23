@@ -1,8 +1,8 @@
 # Integration Builder Send Limiter
 
-We added a small limiter to the PowerShell Azure Functions that send payloads to Integration Builder (IB).
+We added a small limiter to the PowerShell Azure Functions that send subscriber payloads to Integration Builder (IB).
 
-The reason for this change is to avoid a backlog of Service Bus messages clearing too quickly and sending a burst of requests to IB all at once. When messages pile up, Azure Functions can process them very fast. That is usually good, but in this case every processed message can trigger an outbound IB rule execution request. If enough messages are waiting, that can effectively bum rush IB.
+The reason for this change is to avoid a backlog of Service Bus messages clearing too quickly and sending a burst of requests to IB all at once. When messages pile up, Azure Functions can process them very fast. That is usually good, but in this case every processed subscriber message can trigger an outbound IB rule execution request. If enough messages are waiting, that can effectively bum rush IB.
 
 ## What changed
 

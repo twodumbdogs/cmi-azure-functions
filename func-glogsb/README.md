@@ -9,6 +9,9 @@ Outbound HTTP payload intake is handled by the .NET Function App in `../func-glo
 - `cmi-subscribe-client-us`: Service Bus subscriber for US client messages.
 - `cmi-subscribe-matter-us`: Service Bus subscriber for US matter messages.
 - `cmi-subscribe-payor-us`: Service Bus subscriber for US payor messages.
+- `cmi-subscribe-client-can`: Service Bus subscriber for Canada client messages.
+- `cmi-subscribe-matter-can`: Service Bus subscriber for Canada matter messages.
+- `cmi-subscribe-payor-can`: Service Bus subscriber for Canada payor messages.
 - `cmi-subscribe-errors-emea`: Service Bus subscriber for EMEA error messages.
 - `cmi-subscribe-cmi-fails`: Service Bus subscriber for messages on the `cmi-fails` topic.
 - `net-test-us`: HTTP diagnostic endpoint for DNS and outbound network testing.
@@ -32,6 +35,7 @@ Service Bus trigger and output bindings use these connection/settings names:
 
 - `service_bus_RBAC`
 - `us_sb`
+- `can_sb`
 - `emea_sb`
 - `topicClientUS`
 - `subClientUS`
@@ -39,6 +43,12 @@ Service Bus trigger and output bindings use these connection/settings names:
 - `subMatterUS`
 - `topicPayorUS`
 - `subPayorUS`
+- `topicClientCAN`
+- `subClientCAN`
+- `topicMatterCAN`
+- `subMatterCAN`
+- `topicPayorCAN`
+- `subPayorCAN`
 - `topicErrorEMEA`
 - `subErrorEMEA`
 

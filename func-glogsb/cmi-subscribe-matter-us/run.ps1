@@ -228,7 +228,7 @@ try {
         -ContentType "application/json" `
         -Body $ibRequest
 
-    Start-Sleep -Seconds ([int]($env:intapp__ibThrottleSeconds ?? 1))
+    try { Invoke-IbThrottleDelay } catch { LogWarn "IB throttle delay failed but will not fail message processing: $($_.Exception.Message)" }
     LogCtx "Rule execution triggered successfully."
 }
 catch {

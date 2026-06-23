@@ -29,10 +29,10 @@ This does three things:
 Each PowerShell function that calls IB also pauses briefly after a successful IB POST:
 
 ```powershell
-Start-Sleep -Seconds ([int]($env:intapp__ibThrottleSeconds ?? 1))
+Invoke-IbThrottleDelay
 ```
 
-The delay is controlled by the `intapp__ibThrottleSeconds` app setting. If the setting is missing, the default delay is 1 second.
+The delay is controlled by the `intapp__ibThrottleSeconds` app setting. If the setting is missing or invalid, the default delay is 1 second. If the setting is negative, the delay is treated as 0 seconds. The delay helper is intentionally non-fatal so a bad throttle setting does not cause Service Bus to retry a message after IB has already accepted the request.
 
 ## Why this helps
 

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,7 @@ public class CmiOutboundFunction
     private readonly PayloadLookupService _lookupService;
     private readonly JsonMergeService _mergeService;
     private readonly PayloadSchemaValidationService _schemaValidationService;
+    private readonly SchemaValidationFailureWriter _schemaValidationFailureWriter;
     private readonly ServiceBusPublisher _publisher;
 
     public CmiOutboundFunction(
@@ -22,12 +24,14 @@ public class CmiOutboundFunction
         PayloadLookupService lookupService,
         JsonMergeService mergeService,
         PayloadSchemaValidationService schemaValidationService,
+        SchemaValidationFailureWriter schemaValidationFailureWriter,
         ServiceBusPublisher publisher)
     {
         _logger = logger;
         _lookupService = lookupService;
         _mergeService = mergeService;
         _schemaValidationService = schemaValidationService;
+        _schemaValidationFailureWriter = schemaValidationFailureWriter;
         _publisher = publisher;
     }
 
@@ -248,21 +252,66 @@ public class CmiOutboundFunction
         var schemaValidation = _schemaValidationService.Validate(topicKey, mergedBody);
         if (!schemaValidation.IsValid)
         {
-            _logger.LogWarning(
-                "Merged payload failed JSON schema validation. topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, Error={SchemaValidationError}",
-                topicKey,
-                objectId,
-                correlationId,
-                schemaValidation.ErrorMessage ?? "(null)");
-
             var statusCode = schemaValidation.Status == PayloadSchemaValidationStatus.ConfigurationError
                 ? HttpStatusCode.InternalServerError
                 : HttpStatusCode.BadRequest;
 
+            var errorCode = schemaValidation.Status == PayloadSchemaValidationStatus.ConfigurationError
+                ? "SCHEMA_CONFIGURATION_ERROR"
+                : "SCHEMA_VALIDATION_FAILED";
+
+            var validationStatus = schemaValidation.Status.ToString();
+
+            var responseError =
+                $"Merged payload failed JSON schema validation: {schemaValidation.ErrorMessage}";
+
+            var failedField = ExtractSchemaValidationField(schemaValidation.ErrorMessage);
+
+            var functionName = FirstNonBlank(
+                req.FunctionContext.FunctionDefinition.Name,
+                "cmi-outbound-v0")!;
+
+            var invocationId = req.FunctionContext.InvocationId;
+
+            _logger.LogWarning(
+                "Merged payload failed JSON schema validation. functionName={FunctionName}, invocationId={InvocationId}, topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, StatusCode={StatusCode}, ErrorCode={ErrorCode}, ValidationStatus={ValidationStatus}, FailedField={FailedField}, Error={SchemaValidationError}",
+                functionName,
+                invocationId,
+                topicKey,
+                objectId,
+                correlationId,
+                (int)statusCode,
+                errorCode,
+                validationStatus,
+                failedField ?? "(unknown)",
+                schemaValidation.ErrorMessage ?? "(null)");
+
+            await TryWriteSchemaValidationFailureAsync(
+                topicKey: topicKey,
+                objectId: objectId,
+                entityNumber: entityNumber,
+                matterNumber: inboundMatterNumber,
+                requestId: requestId,
+                msgNumber: msgNumber,
+                requestType: requestType,
+                eventType: eventType,
+                memberFirmCode: memberFirmCode,
+                functionName: functionName,
+                invocationId: invocationId,
+                correlationId: correlationId,
+                statusCode: statusCode,
+                errorCode: errorCode,
+                validationStatus: validationStatus,
+                responseError: responseError,
+                validationError: schemaValidation.ErrorMessage,
+                failedField: failedField,
+                mergedPayload: mergedBody,
+                cancellationToken: cancellationToken);
+
             return await CreateResponse(
                 req,
                 statusCode,
-                $"Merged payload failed JSON schema validation: {schemaValidation.ErrorMessage}");
+                responseError);
         }
 
         _logger.LogInformation(
@@ -444,6 +493,205 @@ public class CmiOutboundFunction
             // Fail-open on purpose to preserve main HTTP/SB flow even if IB is down.
             _logger.LogError(ex, "IB rule execution failed post-merge.");
         }
+    }
+
+    private async Task TryWriteSchemaValidationFailureAsync(
+        string topicKey,
+        string objectId,
+        string? entityNumber,
+        string? matterNumber,
+        string? requestId,
+        string? msgNumber,
+        string? requestType,
+        string? eventType,
+        string? memberFirmCode,
+        string? functionName,
+        string? invocationId,
+        string correlationId,
+        HttpStatusCode statusCode,
+        string errorCode,
+        string? validationStatus,
+        string responseError,
+        string? validationError,
+        string? failedField,
+        string mergedPayload,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var wasWritten = await _schemaValidationFailureWriter.WriteAsync(
+                new SchemaValidationFailureRecord
+                {
+                    TopicKey = topicKey,
+                    ObjectId = objectId,
+                    EntityNumber = entityNumber,
+                    MatterNumber = matterNumber,
+                    RequestId = requestId,
+                    MsgNumber = msgNumber,
+                    RequestType = requestType,
+                    EventType = eventType,
+                    MemberFirmCode = memberFirmCode,
+                    FunctionName = functionName,
+                    InvocationId = invocationId,
+                    CorrelationId = correlationId,
+                    HttpStatusCode = (int)statusCode,
+                    ErrorCode = errorCode,
+                    ValidationStatus = validationStatus,
+                    FailedField = failedField,
+                    ResponseError = responseError,
+                    ValidationError = validationError,
+                    MergedPayload = mergedPayload
+                },
+                cancellationToken);
+
+            if (wasWritten)
+            {
+                _logger.LogInformation(
+                    "Schema validation failure written to SQL. functionName={FunctionName}, invocationId={InvocationId}, topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, statusCode={StatusCode}, errorCode={ErrorCode}, failedField={FailedField}",
+                    functionName ?? "(null)",
+                    invocationId ?? "(null)",
+                    topicKey,
+                    objectId,
+                    correlationId,
+                    (int)statusCode,
+                    errorCode,
+                    failedField ?? "(unknown)");
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Schema validation failure SQL write was skipped because SchemaRejects__Enabled is false. functionName={FunctionName}, invocationId={InvocationId}, topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, statusCode={StatusCode}, errorCode={ErrorCode}, failedField={FailedField}",
+                    functionName ?? "(null)",
+                    invocationId ?? "(null)",
+                    topicKey,
+                    objectId,
+                    correlationId,
+                    (int)statusCode,
+                    errorCode,
+                    failedField ?? "(unknown)");
+            }
+        }
+        catch (Exception ex)
+        {
+            var failOpen = GetBooleanEnvironmentVariable("SchemaRejects__FailOpen", defaultValue: true);
+
+            if (failOpen)
+            {
+                // Keep the original validation response behavior. The payload is still invalid,
+                // and this logging failure should not accidentally turn a clean 400 into something
+                // harder for the caller to understand.
+                _logger.LogError(
+                    ex,
+                    "Failed to write schema validation failure to SQL. Continuing because SchemaRejects__FailOpen is true. functionName={FunctionName}, invocationId={InvocationId}, topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, statusCode={StatusCode}, errorCode={ErrorCode}, failedField={FailedField}",
+                    functionName ?? "(null)",
+                    invocationId ?? "(null)",
+                    topicKey,
+                    objectId,
+                    correlationId,
+                    (int)statusCode,
+                    errorCode,
+                    failedField ?? "(unknown)");
+
+                return;
+            }
+
+            _logger.LogError(
+                ex,
+                "Failed to write schema validation failure to SQL. Rethrowing because SchemaRejects__FailOpen is false. functionName={FunctionName}, invocationId={InvocationId}, topicKey={TopicKey}, objectId={ObjectId}, correlationId={CorrelationId}, statusCode={StatusCode}, errorCode={ErrorCode}, failedField={FailedField}",
+                functionName ?? "(null)",
+                invocationId ?? "(null)",
+                topicKey,
+                objectId,
+                correlationId,
+                (int)statusCode,
+                errorCode,
+                failedField ?? "(unknown)");
+
+            throw;
+        }
+    }
+
+    private static bool GetBooleanEnvironmentVariable(string name, bool defaultValue)
+    {
+        var rawValue = Environment.GetEnvironmentVariable(name);
+
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return defaultValue;
+        }
+
+        return rawValue.Trim().ToLowerInvariant() switch
+        {
+            "1" or "true" or "yes" or "y" or "on" => true,
+            "0" or "false" or "no" or "n" or "off" => false,
+            _ => defaultValue
+        };
+    }
+
+    private static string? ExtractSchemaValidationField(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return null;
+        }
+
+        // JsonSchema.Net messages can vary by output format/version, so this is intentionally
+        // defensive. It preserves the full validationError in SQL and extracts a useful field/path
+        // when the message contains one.
+        var patterns = new[]
+        {
+            @"(?i)\bInstanceLocation\b\s*[:=]\s*[""']?(?<path>[$#/]?[A-Za-z0-9_\-./\[\]~]+)",
+            @"(?i)\bInstance\s+Location\b\s*[:=]\s*[""']?(?<path>[$#/]?[A-Za-z0-9_\-./\[\]~]+)",
+            @"(?i)\bJsonPath\b\s*[:=]\s*[""']?(?<path>[$#.]?[A-Za-z0-9_\-./\[\]~]+)",
+            @"(?i)\bPath\b\s*[:=]\s*[""']?(?<path>[$#.]?[A-Za-z0-9_\-./\[\]~]+)",
+            @"(?i)\bProperty\b\s+[""'](?<path>[^""']+)[""']",
+            @"(?i)\brequired\s+propert(?:y|ies)\b.*?[""'](?<path>[^""']+)[""']"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(errorMessage, pattern);
+            if (match.Success)
+            {
+                var value = match.Groups["path"].Value.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return NormalizeSchemaValidationField(value);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeSchemaValidationField(string value)
+    {
+        var normalized = value
+            .Trim()
+            .Trim(',', ';', '.', ')', ']', '"', '\'');
+
+        if (normalized == "#" || normalized == "$" || normalized == "/" || normalized == "#/")
+        {
+            return "$";
+        }
+
+        if (normalized.StartsWith("#/", StringComparison.Ordinal))
+        {
+            normalized = normalized[1..];
+        }
+
+        if (normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            normalized = "$" + normalized.Replace("/", ".");
+        }
+
+        normalized = normalized
+            .Replace("..", ".", StringComparison.Ordinal)
+            .TrimEnd('.');
+
+        return string.IsNullOrWhiteSpace(normalized)
+            ? "$"
+            : normalized;
     }
 
     private static string? ResolveTopicName(string? topicKey) =>

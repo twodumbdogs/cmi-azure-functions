@@ -1,0 +1,451 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CmiMatterSchema",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "topicKey": {
+      "type": "string"
+    },
+    "requestID": {
+      "type": "string"
+    },
+    "date": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "entityNumber": {
+      "type": "string"
+    },
+    "matterNumber": {
+      "type": "string"
+    },
+    "memberFirmCode": {
+      "type": "string",
+      "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+    },
+    "extendedRegions": {
+      "type": [ "array", "null" ],
+      "items": {
+        "type": "string",
+        "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+      }
+    },
+    "msgNumber": {
+      "type": "string"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "requestType": {
+      "type": "string"
+    },
+    "partyRelationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": [ "string", "null" ]
+          },
+          "entityType": {
+            "type": [ "string", "null" ]
+          },
+          "relationship": {
+            "type": [ "string", "null" ]
+          },
+          "payorType": {
+            "type": [ "string", "null" ]
+          },
+          "activePayor": {
+            "type": [ "string", "null" ]
+          },
+          "comment": {
+            "type": [ "string", "null" ]
+          }
+        },
+        "required": [
+          "entity",
+          "entityType",
+          "relationship"
+        ]
+      }
+    },
+    "billable": {
+      "type": ["boolean", "null"]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bidMatter": {
+      "type": ["boolean", "null"]
+    },
+    "bidStatus": {
+      "type": [ "string", "null" ]
+    },
+    "createdOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "openedOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "closedOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "primaryJurisdiction": {
+      "type": [ "string", "null" ]
+    },
+    "additionalCountriesJurisdiction": {
+      "type": [ "array", "null" ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "office": {
+      "type": [ "string", "null" ]
+    },
+    "billingOffices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "office": { "type": "string" },
+          "region": { "type": "string" }
+        }
+      }
+    },
+    "matterUsers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "regionCode": {
+            "type": [ "string", "null" ]
+          },
+          "userType": {
+            "type": [ "string", "null" ]
+          },
+          "timekeeperId": {
+            "type": [ "string", "null" ]
+          },
+          "allocation": {
+            "type": [ "string", "null" ]
+          },
+          "associateTimekeeperId": {
+            "type": [ "string", "null" ]
+          },
+          "office": {
+            "type": [ "string", "null" ]
+          },
+          "department": {
+            "type": [ "string", "null" ]
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              { "type": "null" },
+              {
+                "type": "string",
+                "maxLength": 0
+              }
+            ]
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              { "type": "null" },
+              {
+                "type": "string",
+                "maxLength": 0
+              }
+            ]
+          }
+        },
+        "required": [
+          "regionCode",
+          "timekeeperId",
+          "userType",
+          "allocation"
+        ]
+      }
+    },
+    "confidentialMatter": {
+      "type": [ "boolean", "null" ]
+    },
+    "confidentialityType": {
+      "type": [ "string", "null" ]
+    },
+    "ethicalWall": {
+      "type": [ "boolean", "string", "null" ]
+    },
+    "matterBankingSanctionsExposure": {
+      "type": [ "boolean", "null" ]
+    },
+    "officesInvolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": [ "string", "null" ]
+          },
+          "region": {
+            "type": [ "string", "null" ]
+          }
+        }
+      }
+    },
+    "marketingUS": {
+      "type": [ "boolean", "null" ]
+    },
+    "ascendant": {
+      "type": [ "boolean", "null" ]
+    },
+    "matterCategory": {
+      "type": [ "string", "null" ]
+    },
+    "matterServiceArea": {
+      "type": [ "string", "null" ]
+    },
+    "matterType": {
+      "type": [ "string", "null" ]
+    },
+    "matterTechnicalArea": {
+      "type": [ "string", "null" ]
+    },
+    "matterNatureOfWork": {
+      "type": [ "string", "null" ]
+    },
+    "matterNatureOfProceeding": {
+      "type": [ "string", "null" ]
+    },
+    "matterRiskAssessmentAML": {
+      "type": [ "string", "null" ]
+    },
+    "smaApproval": {
+      "type": [ "boolean", "null" ]
+    },
+    "transformMatter": {
+      "type": [ "boolean", "null" ]
+    },
+    "keyInitiatives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "feeEstimate": {
+      "type": [ "number", "null" ]
+    },
+    "disbEstimate": {
+      "type": ["number", "null"]
+    },
+    "panelTerms": {
+      "type": [ "boolean", "null" ]
+    },
+    "passThrough": {
+      "type": [ "boolean", "null" ]
+    },
+    "passThroughIndustry": {
+      "type": [ "string", "null" ]
+    },
+    "passThroughSub-Industry": {
+      "type": [ "string", "null" ]
+    },
+    "passThroughBeneficiary": {
+      "type": [ "string", "null" ]
+    },
+    "nonStandardTerms": {
+      "type": [ "string", "null" ]
+    },
+    "feeRates": {
+      "type": [ "string", "null" ]
+    },
+    "feeRatesDetails": {
+      "type": [ "string", "null" ]
+    },
+    "disbRates": {
+      "type": [ "string", "null" ]
+    },
+    "disbRatesDetails": {
+      "type": [ "string", "null" ]
+    },
+    "specialTaxRequired": {
+      "type": [ "boolean", "null" ]
+    },
+    "timeEntryUnits": {
+      "type": [ "string", "null" ]
+    },
+    "billingMethod": {
+      "type": [ "string", "null" ]
+    },
+    "billingFrequency": {
+      "type": [ "string", "null" ]
+    },
+    "pONumber": {
+      "type": [ "string", "null" ]
+    },
+    "billingCurrency": {
+      "type": [ "string", "null" ]
+    },
+    "billingLanguage": {
+      "type": [ "string", "null" ]
+    },
+    "billFormatRequirements": {
+      "type": [ "boolean", "null" ]
+    },
+    "billingFormat": {
+      "type": [ "string", "null" ]
+    },
+    "billingPaymentBehavior": {
+      "type": [ "string", "null" ]
+    },
+    "billingInstructions": {
+      "type": [ "string", "null" ]
+    },
+    "matterSpecificActivity": {
+      "type": [ "boolean", "null" ]
+    },
+    "matterSpecificExpense": {
+      "type": [ "boolean", "null" ]
+    },
+    "matterSpecificPhase": {
+      "type": [ "boolean", "null" ]
+    },
+    "ebillingVendor": {
+      "type": [ "string", "null" ]
+    },
+    "eBillingMatter": {
+      "type": [ "boolean", "null" ]
+    },
+    "eBillingCaseNumber": {
+      "type": [ "string", "null" ]
+    },
+    "eBillingCaseName": {
+      "type": [ "string", "null" ]
+    },
+    "addresses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "addressType": {
+            "type": [ "string", "null" ]
+          },
+          "street1": {
+            "type": [ "string", "null" ]
+          },
+          "street2": {
+            "type": [ "string", "null" ]
+          },
+          "street3": {
+            "type": [ "string", "null" ]
+          },
+          "city": {
+            "type": [ "string", "null" ]
+          },
+          "state": {
+            "type": [ "string", "null" ]
+          },
+          "zip": {
+            "type": [ "string", "null" ]
+          },
+          "country": {
+            "type": [ "string", "null" ]
+          }
+        },
+        "required": [
+          "addressType",
+          "street1",
+          "city",
+          "state",
+          "zip"
+        ]
+      }
+    },
+    "contact": {
+      "type": "object",
+      "properties": {
+        "contactName": {
+          "type": [ "string", "null" ]
+        },
+        "title": {
+          "type": [ "string", "null" ]
+        },
+        "email": {
+          "type": [ "string", "null" ]
+        },
+        "phone": {
+          "type": [ "string", "null" ]
+        },
+        "fax": {
+          "type": [ "string", "null" ]
+        }
+      }
+    },
+    "courtNumber": {
+      "type": [ "string", "null" ]
+    }
+  },
+  "required": [
+    "topicKey",
+    "requestID",
+    "date",
+    "entityNumber",
+    "msgNumber",
+    "correlationId",
+    "matterNumber",
+    "name"
+  ]
+}

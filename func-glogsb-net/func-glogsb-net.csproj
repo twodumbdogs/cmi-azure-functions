@@ -19,9 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Schemas\*.json">
+    <None Update="Schemas\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    </None>
   </ItemGroup>
 </Project>

@@ -1,0 +1,129 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CmiPayorSchema",
+  "type": "object",
+  "properties": {
+    "topicKey": {
+      "type": "string"
+    },
+    "requestID": {
+      "type": "string"
+    },
+    "date": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "entityNumber": {
+      "type": "string"
+    },
+    "memberFirmCode": {
+      "type": "string",
+      "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+    },
+    "extendedRegions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+      }
+    },
+    "msgNumber": {
+      "type": "string"
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "requestType": {
+      "type": "string"
+    },
+    "partyId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "entityType": {
+      "type": "string"
+    },
+    "payorType": {
+      "type": [ "string", "null" ]
+    },
+    "payorTaxNumber": {
+      "type": [ "string", "null" ]
+    },
+    "payorVATnumber": {
+      "type": [ "string", "null" ]
+    },
+    "addresses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "addressType": {
+            "type": "string"
+          },
+          "street1": {
+            "type": [ "string", "null" ]
+          },
+          "street2": {
+            "type": [ "string", "null" ]
+          },
+          "street3": {
+            "type": [ "string", "null" ]
+          },
+          "city": {
+            "type": [ "string", "null" ]
+          },
+          "state": {
+            "type": [ "string", "null" ]
+          },
+          "zip": {
+            "type": [ "string", "null" ]
+          },
+          "country": {
+            "type": [ "string", "null" ]
+          },
+          "title": {
+            "type": [ "string", "null" ]
+          },
+          "email": {
+            "type": [ "string", "null" ]
+          },
+          "phone": {
+            "type": [ "string", "null" ]
+          },
+          "fax": {
+            "type": [ "string", "null" ]
+          }
+        }
+      },
+      "required": [
+        "addressType",
+        "street1",
+        "city",
+        "state",
+        "zip",
+        "country"
+      ]
+    }
+  },
+  "required": [
+    "topicKey",
+    "requestID",
+    "date",
+    "entityNumber",
+    "memberFirmCode",
+    "correlationId",
+    "partyId",
+    "name"
+  ]
+}

@@ -1,0 +1,361 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CmiClientSchema",
+  "type": "object",
+  "properties": {
+    "topicKey": {
+      "type": "string"
+    },
+    "requestID": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "entityNumber": {
+      "type": "string"
+    },
+    "memberFirmCode": {
+      "type": "string",
+      "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+    },
+    "extendedRegions": {
+      "type": [ "array", "null" ],
+      "items": {
+        "type": "string",
+        "enum": [ "NRLLP", "NRCAN", "NRFUS" ]
+      }
+    },
+    "msgNumber": {
+      "type": "string"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "requestType": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "openedOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "createdOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "closedOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "dunsNumber": {
+      "type": [ "string", "null" ]
+    },
+    "globalUltimateDunsNumber": {
+      "type": [ "string", "null" ]
+    },
+    "globalUltimateOwnerName": {
+      "type": [ "string", "null" ]
+    },
+    "officeCode": {
+      "type": "string"
+    },
+    "billingOffices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clientType": {
+      "type": "string"
+    },
+    "confidentialClient": {
+      "type": [ "boolean", "null" ]
+    },
+    "clientHaveTermsPreventGSC": {
+      "type": [ "boolean", "null" ]
+    },
+    "companyRegistrationNumber": {
+      "type": [ "string", "null" ]
+    },
+    "bidClientOnly": {
+      "type": [ "boolean", "null" ]
+    },
+    "panelClient": {
+      "type": [ "boolean", "null" ]
+    },
+    "panelName": {
+      "type": "string"
+    },
+    "smaApproval": {
+      "type": [ "boolean", "null" ]
+    },
+    "clientMarkedOutsideStrategy": {
+      "type": [ "boolean", "null" ]
+    },
+    "reasonClientOutsideStrategy": {
+      "type": [ "string", "null" ]
+    },
+    "detailsOfNonStandardTerms": {
+      "type": [ "string", "null" ]
+    },
+    "clientUsers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "regionCode": {
+            "type": "string"
+          },
+          "userType": {
+            "type": "string"
+          },
+          "timekeeperId": {
+            "type": "string"
+          },
+          "allocation": {
+            "type": "string"
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              { "type": "null" },
+              {
+                "type": "string",
+                "maxLength": 0
+              }
+            ]
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              { "type": "null" },
+              {
+                "type": "string",
+                "maxLength": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    "addresses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "addressType": {
+            "type": [ "string", "null" ]
+          },
+          "street1": {
+            "type": [ "string", "null" ]
+          },
+          "street2": {
+            "type": [ "string", "null" ]
+          },
+          "street3": {
+            "type": [ "string", "null" ]
+          },
+          "city": {
+            "type": [ "string", "null" ]
+          },
+          "state": {
+            "type": [ "string", "null" ]
+          },
+          "zip": {
+            "type": [ "string", "null" ]
+          },
+          "country": {
+            "type": [ "string", "null" ]
+          }
+        },
+        "required": [
+          "addressType",
+          "street1",
+          "city",
+          "state",
+          "zip"
+        ]
+      }
+    },
+    "contact": {
+      "type": "object",
+      "properties": {
+        "contactname": {
+          "type": [ "string", "null" ]
+        },
+        "title": {
+          "type": [ "string", "null" ]
+        },
+        "email": {
+          "type": [ "string", "null" ]
+        },
+        "phone": {
+          "type": [ "string", "null" ]
+        },
+        "fax": {
+          "type": [ "string", "null" ]
+        }
+      }
+    },
+    "clientHeadlight": {
+      "type": [ "string", "null" ]
+    },
+    "clientIndustryByHeadlight": {
+      "type": [ "string", "null" ]
+    },
+    "sicCode": {
+      "type": [ "string", "null" ]
+    },
+    "informationalBarrier": {
+      "type": "string"
+    },
+    "highRisk": {
+      "type": [ "boolean", "null" ]
+    },
+    "clientSanctionsExposure": {
+      "type": [ "boolean", "null" ]
+    },
+    "lastAmlCheckDate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    },
+    "eBillingClient": {
+      "type": [ "boolean", "null" ]
+    },
+    "eBillingVendorId": {
+      "type": [ "string", "null" ]
+    },
+    "purchaseOrderNumber": {
+      "type": [ "boolean", "null" ]
+    },
+    "billingContactVatNumber": {
+      "type": [ "string", "null" ]
+    },
+    "taxRegistrationNumber": {
+      "type": [ "string", "null" ]
+    },
+    "acsendant": {
+      "type": [ "boolean", "null" ]
+    },
+    "countryOfIncorporation": {
+      "type": [ "string", "null" ]
+    },
+    "govEntity": {
+      "type": "string"
+    },
+    "clientImposedTerms": {
+      "type": "string"
+    },
+    "category": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ipClientCode": {
+      "type": [ "string", "null" ]
+    },
+    "ipClientCategory": {
+      "type": [ "string", "null" ]
+    },
+    "ipRegion": {
+      "type": [ "string", "null" ]
+    },
+    "ipCreatedOn": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        { "type": "null" },
+        {
+          "type": "string",
+          "maxLength": 0
+        }
+      ]
+    }
+  },
+  "required": [
+    "topicKey",
+    "requestID",
+    "date",
+    "entityNumber",
+    "memberFirmCode",
+    "msgNumber",
+    "correlationId",
+    "name",
+    "status",
+    "openedOn",
+    "clientUsers"
+  ]
+}

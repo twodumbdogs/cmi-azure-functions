@@ -248,6 +248,15 @@ public class CmiOutboundFunction
         {
             WriteIndented = true
         });
+// -----------------------------------------------------------------------------
+// Schema validation gate
+//
+// "I reject bad JSON before it becomes someone else's problem." 😎
+//
+// Validate the final merged payload before calling Integration Builder or
+// publishing to Service Bus. If validation fails, write the reject details to SQL
+// and stop the outbound flow.
+// -----------------------------------------------------------------------------
 
         var schemaValidation = _schemaValidationService.Validate(topicKey, mergedBody);
         if (!schemaValidation.IsValid)

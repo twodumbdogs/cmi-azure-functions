@@ -23,4 +23,15 @@ Sql__Server
 Sql__Database
 ```
 
+Each environment should already have its SQL connection settings configured.
+
+Apply or refresh only the SchemaRejects settings with:
+
+```powershell
+.\set-schema-rejects-app-settings.example.ps1 dev
+.\set-schema-rejects-app-settings.example.ps1 pre-prod
+```
+
+The same SchemaRejects defaults are used by `deployme-net.ps1` when missing app settings are ensured before deployment.
+
 The code uses a direct parameterized INSERT. No stored procedure is required.

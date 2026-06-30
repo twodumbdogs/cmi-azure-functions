@@ -7,8 +7,12 @@
   contents, and deploys them to the target Function App using Azure CLI.
   App settings and networking are left untouched.
 
+  For known environments, the first argument can be an environment name
+  instead of explicit -ResourceGroup and -FunctionApp values.
+
 .PARAMETER ResourceGroup
-  Resource group containing the target Function App.
+  Resource group containing the target Function App, or a known environment
+  name when FunctionApp is omitted: dev, pre-prod, preprod, qa, or prod.
 
 .PARAMETER FunctionApp
   Name of the target Function App.
@@ -29,16 +33,89 @@ function Show-Usage {
     $scriptName = Split-Path -Leaf $PSCommandPath
     Write-Host ""
     Write-Host "Usage:" -ForegroundColor Cyan
+    Write-Host "  .\$scriptName <environment>"
     Write-Host "  .\$scriptName -ResourceGroup <resource-group> -FunctionApp <function-app> [-ProjectPath <path>]"
     Write-Host ""
-    Write-Host "Example:" -ForegroundColor Cyan
-    Write-Host "  .\$scriptName -ResourceGroup ""rg-glogsb-dev-uksouth-001"" -FunctionApp ""func-glogsb-dev-uksouth-001"""
+    Write-Host "Known environments:" -ForegroundColor Cyan
+    Write-Host "  dev      -> rg-glogsb-dev-uksouth-001 / func-glogsb-dev-uksouth-001"
+    Write-Host "  pre-prod -> rg-glogsb-qa-ukwest-001 / func-glogsb-qa-ukwest-001"
+    Write-Host "  prod     -> not configured yet"
     Write-Host ""
+    Write-Host "Examples:" -ForegroundColor Cyan
+    Write-Host "  .\$scriptName dev"
+    Write-Host "  .\$scriptName pre-prod"
+    Write-Host "  .\$scriptName -ResourceGroup ""rg-glogsb-dev-uksouth-001"" -FunctionApp ""func-glogsb-dev-uksouth-001"""
+    Write-Host "  .\$scriptName -ResourceGroup ""rg-glogsb-qa-ukwest-001"" -FunctionApp ""func-glogsb-qa-ukwest-001"""
+    Write-Host ""
+}
+
+function Resolve-DeploymentTarget {
+    param(
+        [string]$RequestedResourceGroup,
+        [string]$RequestedFunctionApp
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedFunctionApp)) {
+        return [pscustomobject]@{
+            ResourceGroup    = $RequestedResourceGroup
+            FunctionApp      = $RequestedFunctionApp
+            EnvironmentName  = $null
+        }
+    }
+
+    $environmentName = $RequestedResourceGroup
+    if ([string]::IsNullOrWhiteSpace($environmentName)) {
+        return [pscustomobject]@{
+            ResourceGroup    = $RequestedResourceGroup
+            FunctionApp      = $RequestedFunctionApp
+            EnvironmentName  = $null
+        }
+    }
+
+    switch -Regex ($environmentName.Trim()) {
+        '^(?i:dev)$' {
+            return [pscustomobject]@{
+                ResourceGroup    = "rg-glogsb-dev-uksouth-001"
+                FunctionApp      = "func-glogsb-dev-uksouth-001"
+                EnvironmentName  = "dev"
+            }
+        }
+        '^(?i:pre-?prod|qa)$' {
+            return [pscustomobject]@{
+                ResourceGroup    = "rg-glogsb-qa-ukwest-001"
+                FunctionApp      = "func-glogsb-qa-ukwest-001"
+                EnvironmentName  = "pre-prod"
+            }
+        }
+        '^(?i:prod|production)$' {
+            throw "Prod target is not configured yet. Use dev/pre-prod, or pass -ResourceGroup and -FunctionApp explicitly when prod exists."
+        }
+        default {
+            return [pscustomobject]@{
+                ResourceGroup    = $RequestedResourceGroup
+                FunctionApp      = $RequestedFunctionApp
+                EnvironmentName  = $null
+            }
+        }
+    }
+}
+
+$deploymentTarget = Resolve-DeploymentTarget `
+    -RequestedResourceGroup $ResourceGroup `
+    -RequestedFunctionApp $FunctionApp
+
+$ResourceGroup = $deploymentTarget.ResourceGroup
+$FunctionApp = $deploymentTarget.FunctionApp
+
+if (-not [string]::IsNullOrWhiteSpace($deploymentTarget.EnvironmentName)) {
+    Write-Host "Using $($deploymentTarget.EnvironmentName) deployment target:" -ForegroundColor Cyan
+    Write-Host "  Resource group: $ResourceGroup" -ForegroundColor Cyan
+    Write-Host "  Function app:   $FunctionApp" -ForegroundColor Cyan
 }
 
 if ([string]::IsNullOrWhiteSpace($ResourceGroup) -or [string]::IsNullOrWhiteSpace($FunctionApp)) {
     Show-Usage
-    throw "Please provide both -ResourceGroup and -FunctionApp."
+    throw "Please provide an environment name, or both -ResourceGroup and -FunctionApp."
 }
 
 $resolvedProjectPath = (Resolve-Path -LiteralPath $ProjectPath).Path
